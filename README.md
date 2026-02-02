@@ -1,7 +1,7 @@
 # 👁️🐧 AI Video Clipper & LoRA Captioner (v3.7)
 
-**The most flexible automated dataset creator for LoRA training.**
-*New: Custom Projects & Bulk Video Captioning Mode.*
+**The most flexible automated dataset creator for Video LoRA training.**
+*Now featuring Project Management, Bulk Video Mode, and Auto-Updates.*
 
 ---
 
@@ -13,23 +13,31 @@
 ---
 
 ### ⚡ What's New in v3.7 (Project Manager Update)
+* **🔄 Auto-Update Script:** New `update.bat` added! Keep your local files in sync with the latest GitHub improvements with a single click.
 * **📂 Custom Project Names:** You can now name your dataset folder (e.g., "Batman_LoRA") instead of relying on default names.
 * **📝 Bulk Video Captioning:** A new dedicated tab for captioning already existing video folders. No cutting needed, just pure AI description.
 * **💎 Native Quality Toggle:** Keep original resolution and FPS for lossless datasets.
-* **🚀 UV-Powered Setup:** Lightning-fast installation and native Linux support.
+* **🚀 Instant UI Feedback:** New "Phase 1/2" status messages to monitor WhisperX initialization and analysis.
 
 ---
 
 ## 🚀 How to Use
 
 ### 🎥 1. Auto-Clipper
-Upload a video, set your **Project Name**, and let the AI find the perfect segments based on speech. It will cut the video and describe each clip automatically.
+Upload a video, set your **Project Name**, and let the AI find segments based on speech. It will cut and describe each clip automatically.
 
-### 📝 2. Bulk Video Captioner (New!)
-If you already have a folder full of video clips (from other tools or manual cutting), use this mode. Select the folder, and the AI will generate `.txt` files for every video using the Vision model.
+### 📝 2. Bulk Video Captioner
+Select a folder containing already cut `.mp4` or `.mkv` files. The AI will generate `.txt` files for every video using the Vision model.
 
 ### 🖼️ 3. Image Folder Captioner
-Standard mode for bulk-captioning images for LoRA training.
+Standard mode for bulk-captioning image folders.
+
+---
+
+## 🔄 How to stay updated
+If you want to receive new features automatically:
+1. Make sure you have **Git** installed.
+2. Run **`update.bat`** in your main folder. It will pull the latest `app.py` and other fixes directly from this repository.
 
 ---
 
