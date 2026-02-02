@@ -1,6 +1,6 @@
 # 👁️🐧 AI Video Clipper & LoRA Captioner (v3.5)
 
-![Demo](demo.webp)
+![Demo](images/demo.webp)
 
 **The ultimate automated dataset creation tool.**
 *Auto-slicing, Transcribing, and Vision Captioning for LoRA/LyCORIS training.*
@@ -56,6 +56,9 @@ This project is a collaborative effort driven by the open-source community:
     ```bash
     ./run.sh
     ```
+
+### ☁️ Cloud / RunPod
+For those who prefer processing datasets on high-VRAM cloud GPUs, an illustrated [RunPod Deployment Guide](RUNPOD-HOWTO.md) is available to walk you through the setup.
 
 ---
 
