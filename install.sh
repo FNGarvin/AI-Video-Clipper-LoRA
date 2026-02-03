@@ -58,6 +58,15 @@ uv pip install \
     --link-mode hardlink \
     "git+https://github.com/m-bain/whisperX.git" --no-deps
 
+echo "[INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)..."
+if ls wheels/llama_cpp_python*.whl 1> /dev/null 2>&1; then
+    echo "[INFO] Installing verified local CUDA 12.8 wheel..."
+    uv pip install wheels/llama_cpp_python*.whl
+else
+    echo "[WARNING] Local wheel not found. Attempting to install from PyPI (may require compilation)..."
+    uv pip install llama-cpp-python
+fi
+
 echo "[INFO] Syncing remaining dependencies from pyproject.toml..."
 uv pip install \
     --link-mode hardlink \

@@ -1,4 +1,6 @@
+[browser]
+gatherUsageStats = false
+
 [server]
 maxUploadSize = 4000
 headless = true
-enableCORS = false

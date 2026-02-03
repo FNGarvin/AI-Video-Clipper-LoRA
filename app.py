@@ -65,42 +65,161 @@ app_mode = st.sidebar.selectbox("Choose Mode:", [
     "🖼️ Image Folder Captioner"
 ])
 
+def scan_local_gguf_models(models_dir):
+    """
+    Scans the models directory for GGUF model pairs:
+    A pair consists of a .gguf file (weights) and a mmproj-*.gguf file (projector).
+    Returns a dictionary of found models formatted for model_options.
+    """
+    discovered = {}
+    if not os.path.exists(models_dir):
+        return discovered
+        
+    for root, dirs, files in os.walk(models_dir):
+        # We look for files ending in .gguf
+        # Main model: NOT starting with mmproj-
+        # Projector: STARTING with mmproj-
+        ggufs = [f for f in files if f.endswith(".gguf") and not f.lower().startswith("mmproj-")]
+        projectors = [f for f in files if f.lower().startswith("mmproj-") and f.endswith(".gguf")]
+        
+        if ggufs and projectors:
+            # We use the relative path from MODELS_DIR as the repo/subfolder name
+            rel_root = os.path.relpath(root, models_dir).replace("\\", "/")
+            for g in ggufs:
+                # If there's multiple projectors, we pick the first one 
+                # (usually there's only one relevant one in a specific subfolder)
+                label = f"🔍 Discovered: {os.path.basename(root)} ({g})"
+                discovered[label] = {
+                    "backend": "gguf",
+                    "repo": rel_root, 
+                    "model": g,
+                    "projector": projectors[0]
+                }
+    return discovered
+
 st.sidebar.divider()
-model_choice = st.sidebar.radio("Vision Model:", ["Qwen2-VL-7B (High Quality)", "Qwen2-VL-2B (Fast)"], index=0)
-SELECTED_MODEL_ID = "Qwen/Qwen2-VL-7B-Instruct" if "7B" in model_choice else "Qwen/Qwen2-VL-2B-Instruct"
+# --- WYBÓR MODELU ---
+model_options = {
+    "GGUF: Gemma-3-12B (Next-Gen, 4-bit GGUF)": {
+        "backend": "gguf",
+        "repo": "unsloth/gemma-3-12b-it-GGUF",
+        "model": "gemma-3-12b-it-IQ4_XS.gguf",
+        "projector": "mmproj-F16.gguf"
+    },
+    "GGUF: Qwen3-VL-7B (Next-Gen, 4-bit GGUF)": {
+        "backend": "gguf",
+        "repo": "unsloth/Qwen3-VL-7B-Instruct-GGUF",
+        "model": "Qwen3-VL-7B-Instruct-Q4_K_M.gguf",
+        "projector": "mmproj-model-f16.gguf"
+    },
+    "Legacy: Qwen2-VL-7B (Legacy Transformers)": {
+        "backend": "transformers",
+        "id": "Qwen/Qwen2-VL-7B-Instruct"
+    },
+    "Legacy: Qwen2-VL-2B (Legacy Transformers)": {
+        "backend": "transformers",
+        "id": "Qwen/Qwen2-VL-2B-Instruct"
+    }
+}
+
+# Auto-Discovery of Local GGUF Models
+local_ggufs = scan_local_gguf_models(MODELS_DIR)
+if local_ggufs:
+    # Filter out models already in hardcoded options to avoid duplicates
+    existing_models = [m["model"] for m in model_options.values() if m.get("backend") == "gguf"]
+    for label, config in local_ggufs.items():
+        if config["model"] not in existing_models:
+            model_options[label] = config
+
+model_label = st.sidebar.radio("Vision Model:", list(model_options.keys()), index=0)
+SELECTED_MODEL = model_options[model_label]
+
+# --- SIDEBAR: ADVANCED OPTIONS ---
+st.sidebar.divider()
+with st.sidebar.expander("🛠️ Advanced Generation Options"):
+    gen_temp = st.slider("Temperature", 0.0, 1.5, 0.7, 0.1)
+    gen_top_p = st.slider("Top P", 0.0, 1.0, 0.9, 0.05)
+    gen_max_tokens = st.number_input("Max New Tokens", 64, 2048, 256)
+    
+GEN_CONFIG = {
+    "temperature": gen_temp,
+    "top_p": gen_top_p,
+    "max_tokens": gen_max_tokens # unified key for both engines to map from
+}
 
 st.sidebar.divider()
 st.sidebar.markdown("### 📝 Vision Instructions")
 default_prompt = "Describe this {type} in detail for a dataset. Main subject: {trigger}. Describe the action, camera movement, lighting, atmosphere, and background."
 user_instruction = st.sidebar.text_area("System Prompt:", value=default_prompt, height=150)
 
-# --- 4. FUNKCJE ---
+# --- 4. FUNKCJE POMOCNICZE ---
 def clear_vram():
     gc.collect()
     torch.cuda.empty_cache()
 
 def load_vision_models():
-    st.info(f"⏳ Loading Vision Engine ({SELECTED_MODEL_ID})...")
-    model = Qwen2VLForConditionalGeneration.from_pretrained(
-        SELECTED_MODEL_ID, torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa", low_cpu_mem_usage=True 
-    )
-    processor = AutoProcessor.from_pretrained(SELECTED_MODEL_ID)
-    return model, processor
+    if SELECTED_MODEL["backend"] == "gguf":
+        # Handle GGUF Loading via st.session_state for persistence
+        if 'vision_engine' not in st.session_state or st.session_state.get('last_model') != str(SELECTED_MODEL):
+            if 'vision_engine' in st.session_state:
+                st.session_state['vision_engine'].clear()
+            
+            from vision_engine import GGUFVisionEngine
+            with st.status(f"🚀 Preparing GGUF Engine...", expanded=True) as status:
+                engine = GGUFVisionEngine(
+                    SELECTED_MODEL["repo"], 
+                    model_file=SELECTED_MODEL["model"],
+                    projector_file=SELECTED_MODEL["projector"],
+                    device=device,
+                    models_dir=MODELS_DIR
+                )
+                engine.load(log_callback=status.write)
+                status.update(label="✅ GGUF Engine Ready!", state="complete", expanded=False)
+            st.session_state['vision_engine'] = engine
+            st.session_state['last_model'] = str(SELECTED_MODEL)
+        return st.session_state['vision_engine'], None
+    else:
+        # Legacy Transformers Path
+        model_id = SELECTED_MODEL["id"]
+        st.info(f"⏳ Loading Vision Engine ({model_id})...")
+        model = Qwen2VLForConditionalGeneration.from_pretrained(
+            model_id, torch_dtype=torch.bfloat16, device_map="auto", attn_implementation="sdpa", low_cpu_mem_usage=True 
+        )
+        processor = AutoProcessor.from_pretrained(model_id)
+        return model, processor
 
 def select_folder_dialog():
     root = tk.Tk(); root.withdraw(); root.wm_attributes('-topmost', 1)
     folder_path = filedialog.askdirectory(master=root); root.destroy()
     return folder_path
 
-def caption_content(content_path, content_type, model, processor, trigger, custom_prompt, model_id):
+def caption_content(content_path, content_type, model, processor, trigger, custom_prompt):
     if not custom_prompt.strip(): custom_prompt = "Describe this content in high detail."
+    
+    # GGUF Backend Routing
+    if SELECTED_MODEL["backend"] == "gguf":
+        # Pass parameters to GGUF engine
+        gguf_engine = model # In GGUF mode, 'model' is the GGUFVisionEngine instance
+        # Map parameters (GGUF uses 'max_tokens' instead of 'max_new_tokens')
+        return gguf_engine.caption(content_path, content_type, trigger, custom_prompt, gen_config=GEN_CONFIG)
+
+    # Legacy Transformers Backend
+    model_id = SELECTED_MODEL["id"]
     if "2B" in model_id: custom_prompt += " Output as a single, continuous paragraph. No markdown."
     final_prompt = custom_prompt.replace("{trigger}", trigger if trigger else "").replace("{type}", "video" if content_type == "video" else "image")
+    
     messages = [{"role": "user", "content": [{"type": content_type, content_type: content_path, "max_pixels": 360*420, "fps": 1.0}, {"type": "text", "text": final_prompt}]}]
     text = processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
     image_inputs, video_inputs = process_vision_info(messages)
     inputs = processor(text=[text], images=image_inputs, videos=video_inputs, padding=True, return_tensors="pt").to(device)
-    generated_ids = model.generate(**inputs, max_new_tokens=256)
+    
+    generated_ids = model.generate(
+        **inputs, 
+        max_new_tokens=GEN_CONFIG["max_tokens"],
+        temperature=GEN_CONFIG["temperature"],
+        top_p=GEN_CONFIG["top_p"],
+        do_sample=GEN_CONFIG["temperature"] > 0
+    )
     output_text = processor.batch_decode(generated_ids[:, inputs.input_ids.shape[1]:], skip_special_tokens=True)[0]
     output_text = output_text.replace("**", "").replace("##", "")
     if trigger and trigger not in output_text: output_text = f"{trigger}, {output_text}"
@@ -177,7 +296,7 @@ if app_mode == "🎥 Video Auto-Clipper":
                     else:
                         sub.write_videofile(c_path, codec="libx264", audio_codec="aac", preset="medium", logger=None)
                     
-                    cap = caption_content(c_path, "video", v_model, v_proc, lora_trigger, user_instruction, SELECTED_MODEL_ID)
+                    cap = caption_content(c_path, "video", v_model, v_proc, lora_trigger, user_instruction)
                     speech = seg['text'].strip()
                     with open(os.path.join(out_dir, f"{base}.txt"), "w", encoding="utf-8") as f: f.write(f"{cap} The person says: \"{speech}\"")
                     with st.expander(f"✅ {base}"):
@@ -218,7 +337,7 @@ elif app_mode == "📝 Bulk Video Captioner":
         videos = [f for f in os.listdir(v_dir) if f.lower().endswith((".mp4", ".mkv"))]
         prog = st.progress(0)
         for i, v_name in enumerate(videos):
-            p = os.path.join(v_dir, v_name); cap = caption_content(p, "video", v_model, v_proc, lora_trigger, user_instruction, SELECTED_MODEL_ID)
+            p = os.path.join(v_dir, v_name); cap = caption_content(p, "video", v_model, v_proc, lora_trigger, user_instruction)
             with open(os.path.splitext(p)[0] + ".txt", "w", encoding="utf-8") as f: f.write(cap)
             prog.progress((i+1)/len(videos))
         
@@ -245,7 +364,7 @@ else: # IMAGE CAPTIONER
         imgs = [f for f in os.listdir(img_dir) if f.lower().endswith((".png", ".jpg", ".webp"))]
         prog = st.progress(0)
         for i, name in enumerate(imgs):
-            p = os.path.join(img_dir, name); cap = caption_content(p, "image", v_model, v_proc, lora_trigger, user_instruction, SELECTED_MODEL_ID)
+            p = os.path.join(img_dir, name); cap = caption_content(p, "image", v_model, v_proc, lora_trigger, user_instruction)
             with open(os.path.splitext(p)[0] + ".txt", "w", encoding="utf-8") as f: f.write(cap)
             prog.progress((i+1)/len(imgs))
         
