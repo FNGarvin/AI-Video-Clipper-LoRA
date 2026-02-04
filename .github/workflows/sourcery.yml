@@ -21,4 +21,5 @@ jobs:
           # This forces the bot to post the summary and diagrams to the PR
           skip-comment: false
           show-unchanged: false
+        continue-on-error: true
 #eof
