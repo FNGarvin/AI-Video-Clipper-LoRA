@@ -129,7 +129,11 @@ class GGUFVisionEngine:
             if not os.path.exists(p_path): raise FileNotFoundError(f"Projector file missing: {p_path}")
 
         if p_path:
-            self.chat_handler = Llava15ChatHandler(clip_model_path=p_path, verbose=False)
+            try:
+                self.chat_handler = Llava15ChatHandler(clip_model_path=p_path, verbose=False)
+            except Exception as e:
+                print(f"⚠️ Failed to init LlavaChatHandler: {e}")
+                self.chat_handler = None
         else:
             self.chat_handler = None
 
@@ -376,14 +380,16 @@ def scan_local_gguf_models(models_dir):
             # Use the first projector found, or None
             proj_file = projectors[0] if projectors else None
             
-            for g in ggufs:
-                label = f"🔍 Found: {os.path.basename(root)}/{g}"
-                discovered[label] = {
-                    "backend": "gguf",
-                    "repo": rel_root, # This might be a path if local, or ID if structured
-                    "model": g,
-                    "projector": proj_file
-                }
+            # User Policy: Only show if BOTH model and projector exist
+            if proj_file:
+                for g in ggufs:
+                    label = f"🔍 Found: {os.path.basename(root)}/{g}"
+                    discovered[label] = {
+                        "backend": "gguf",
+                        "repo": rel_root, # This might be a path if local, or ID if structured
+                        "model": g,
+                        "projector": proj_file
+                    }
     return discovered
 
 # EOF vision_engine.py

@@ -144,6 +144,9 @@ echo.
 echo [STEP 3/3] Installing AI Stack...
 uv pip install "git+https://github.com/m-bain/whisperX.git" --no-deps --link-mode hardlink
 
+echo [INFO] Ensuring correct CTranslate2 (Windows) - Pinning <4.7.0 to avoid ROCm bug...
+uv pip install "ctranslate2<4.7.0" --index-url https://pypi.org/simple --force-reinstall
+
 echo [INFO] Syncing remaining dependencies from pyproject.toml...
 uv pip install -r pyproject.toml --extra-index-url https://download.pytorch.org/whl/cu128 --link-mode hardlink
 

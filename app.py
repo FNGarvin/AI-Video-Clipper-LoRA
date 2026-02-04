@@ -189,10 +189,27 @@ if app_mode == "🎥 Video Auto-Clipper":
             status_box.info("🚀 Phase 1: Audio Analysis (WhisperX)...")
             
             # Use downloader to ensure model is present and get local path
-            # This bypasses huggingface_hub's strict offline checks that fail
             wx_repo = "Systran/faster-whisper-large-v3"
-            with st.spinner("Ensuring Audio Model..."):
-                wx_path = download_model(wx_repo, MODELS_DIR, log_callback=None)
+            
+            # Async-capable download with cancellation hook
+            from downloader import ModelDownloader
+            import threading
+            
+            wx_path = os.path.join(MODELS_DIR, wx_repo)
+            
+            # Check if exists first to avoid UI flash
+            if not os.path.exists(os.path.join(wx_path, "config.json")):
+                 dl = ModelDownloader(wx_repo, MODELS_DIR, log_callback=status_box.text)
+                 
+                 # Placeholder for Stop Button (Functionally difficult in blocking script, 
+                 # but we handle Script Stop via finally)
+                 try:
+                     with st.spinner("Downloading Whisper Model... (Check Console for Progress)"):
+                         wx_path = dl.run()
+                 except (KeyboardInterrupt, SystemExit, Exception) as e:
+                     dl.cancel()
+                     if isinstance(e, KeyboardInterrupt): os._exit(0) # Pass through
+                     raise e
             
             model_w = whisperx.load_model(wx_path, device, compute_type="float16")
             audio = whisperx.load_audio(video_path)
@@ -242,7 +259,7 @@ if app_mode == "🎥 Video Auto-Clipper":
                     # Captioning With Streaming
                     stream_box = st.empty()
                     def on_token(text):
-                        stream_box.markdown(f"**📝 Generuję:** {text}")
+                        stream_box.markdown(f"**📝 Generating:** {text}")
                     
                     cap = v_engine.caption(c_path, "video", lora_trigger, user_instruction, 
                                            gen_config=GEN_CONFIG, stream_callback=on_token)
