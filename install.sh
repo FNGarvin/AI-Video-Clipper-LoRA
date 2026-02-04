@@ -29,7 +29,23 @@ if ! command -v uv &> /dev/null; then
     export PATH="$PATH:$HOME/.cargo/bin:$HOME/.local/bin"
 fi
 
+# Argument parsing
+RESET_VENV=false
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --reset) RESET_VENV=true ;;
+    esac
+    shift
+done
+
 echo "[STEP 1/3] Preparing Environment..."
+if [ "$RESET_VENV" = true ]; then
+    if [ -d ".venv" ]; then
+        echo "[INFO] Resetting virtual environment as requested..."
+        rm -rf .venv
+    fi
+fi
+
 if [ ! -d ".venv" ]; then
     uv venv .venv --python 3.10 --link-mode hardlink
 fi

@@ -46,8 +46,28 @@ if %errorlevel% neq 0 (
     )
 )
 
+:: Argument parsing
+set "RESET_VENV=false"
+set "NO_PAUSE=false"
+
+:parse_args
+if "%~1"=="" goto end_parse_args
+if /i "%~1"=="--reset" set "RESET_VENV=true"
+if /i "%~1"=="--no-pause" set "NO_PAUSE=true"
+shift
+goto parse_args
+:end_parse_args
+
 echo.
 echo [STEP 1/3] Preparing isolated environment (uv)...
+
+if "%RESET_VENV%"=="true" (
+    if exist ".venv" (
+        echo [INFO] Resetting virtual environment as requested...
+        rd /s /q ".venv"
+    )
+)
+
 if not exist ".venv" (
     uv venv .venv --python 3.10 --link-mode hardlink
 )
@@ -127,4 +147,5 @@ echo                    INSTALLATION COMPLETE!
 echo ======================================================================
 echo You can now run the program using "Run.bat".
 echo.
-pause
+echo.
+if "%NO_PAUSE%"=="false" pause

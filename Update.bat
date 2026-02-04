@@ -20,7 +20,16 @@ git pull origin main
 
 if %errorlevel% equ 0 (
     echo.
-    echo [SUCCESS] Project updated to the latest version!
+    echo [SUCCESS] Project updated! Now refreshing dependencies...
+    echo [INFO] This may take a moment. A full log is being written to install.log
+    echo.
+    call Install.bat --reset --no-pause > install.log 2>&1
+    
+    if %errorlevel% equ 0 (
+        echo [SUCCESS] Update and installation complete!
+    ) else (
+        echo [ERROR] Dependency refresh failed. Please check install.log for details.
+    )
     echo.
 ) else (
     echo.
