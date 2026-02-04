@@ -61,6 +61,9 @@ Standard mode for captioning datasets of images using the powerful Qwen2-VL Visi
 1.  Run `./install.sh`.
 2.  Run `./run.sh`.
 
+☁️ Cloud / RunPod
+For those who prefer processing datasets on high-VRAM cloud GPUs, an illustrated RunPod Deployment Guide is available to walk you through the setup.
+
 ---
 
 ## ⚠️ Important Notes
@@ -80,4 +83,5 @@ Standard mode for captioning datasets of images using the powerful Qwen2-VL Visi
 ---
 <div align="center">
   <b>Licensed under MIT - Built for the Community</b>
+
 </div>
