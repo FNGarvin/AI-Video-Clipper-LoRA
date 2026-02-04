@@ -120,24 +120,9 @@ uv pip install ^
     "torch==2.10.0+cu128" "torchvision==0.25.0+cu128" "torchaudio==2.10.0+cu128"
 
 echo [INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)...
-set "FOUND_WHEEL="
-
-REM Robust search using DIR to find the wheel
-for /f "delims=" %%f in ('dir /b /s wheels\llama_cpp_python*win_amd64.whl 2^>nul') do (
-    set "FOUND_WHEEL=%%f"
-)
-
-if not defined FOUND_WHEEL (
-    echo.
-    echo [ERROR] Pre-built Windows Wheel for llama-cpp-python NOT FOUND!
-    echo [ERROR] We require a specific CUDA 12.8 wheel for Python 3.10.
-    echo.
-    pause
-    exit /b 1
-)
-
-echo [INFO] Installing verified local CUDA 12.8 wheel: !FOUND_WHEEL!
-uv pip install "!FOUND_WHEEL!" --force-reinstall
+set "WIN_WHEEL_URL=https://github.com/FNGarvin/AI-Video-Clipper-LoRA/releases/download/bin-lcp-0.3.23-cu128/llama_cpp_python-0.3.23+cu128-cp310-cp310-win_amd64.whl"
+echo [INFO] Installing verified CUDA 12.8 wheel from release...
+uv pip install "%WIN_WHEEL_URL%" --force-reinstall
 
 
 echo.

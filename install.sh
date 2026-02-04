@@ -60,22 +60,9 @@ uv pip install \
     "git+https://github.com/m-bain/whisperX.git" --no-deps
 
 echo "[INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)..."
-if ls wheels/llama_cpp_python*linux_x86_64.whl 1> /dev/null 2>&1; then
-    echo "[INFO] Installing verified local CUDA 12.8 wheel..."
-    uv pip install wheels/llama_cpp_python*linux_x86_64.whl --force-reinstall
-else
-    echo ""
-    echo "[ERROR] Pre-built Linux Wheel for llama-cpp-python NOT FOUND!"
-    echo "[ERROR] We require a specific CUDA 12.8 wheel for Python 3.10 to avoid"
-    echo "[ERROR] compiling from source (which creates mismatches)."
-    echo ""
-    echo "[ACTION REQUIRED]"
-    echo "1. Build the wheel: Run 'pip wheel llama-cpp-python --no-deps --wheel-dir=wheels' in the .venv"
-    echo "2. Ensure CMAKE_ARGS='-DGGML_CUDA=on' is set if building manually."
-    echo "3. Run ./install.sh again."
-    echo ""
-    exit 1
-fi
+LINUX_WHEEL_URL="https://github.com/FNGarvin/AI-Video-Clipper-LoRA/releases/download/bin-lcp-0.3.23-cu128/llama_cpp_python-0.3.23+cu128-cp310-cp310-linux_x86_64.whl"
+echo "[INFO] Installing verified CUDA 12.8 wheel from release..."
+uv pip install "$LINUX_WHEEL_URL" --force-reinstall
 
 echo "[INFO] Syncing remaining dependencies from pyproject.toml..."
 uv pip install \
