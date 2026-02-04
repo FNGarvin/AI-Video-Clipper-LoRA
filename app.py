@@ -190,26 +190,17 @@ if app_mode == "🎥 Video Auto-Clipper":
             
             # Use downloader to ensure model is present and get local path
             wx_repo = "Systran/faster-whisper-large-v3"
+            wx_path = os.path.normpath(os.path.join(MODELS_DIR, wx_repo))
             
-            # Async-capable download with cancellation hook
-            from downloader import ModelDownloader
-            import threading
+            # Robust Check: Specify essential files to ensure they are verified
+            essential_wx = ["config.json", "model.bin", "tokenizer.json", "vocabulary.json"]
             
-            wx_path = os.path.join(MODELS_DIR, wx_repo)
+            # Use downloader to ensure model is present and get local path
+            if not all(os.path.exists(os.path.join(wx_path, f)) for f in essential_wx):
+                from downloader import download_model
+                with st.spinner("Ensuring Whisper Model (Downloader Active)..."):
+                    wx_path = download_model(wx_repo, MODELS_DIR, specific_files=essential_wx, log_callback=status_box.text)
             
-            # Check if exists first to avoid UI flash
-            if not os.path.exists(os.path.join(wx_path, "config.json")):
-                 dl = ModelDownloader(wx_repo, MODELS_DIR, log_callback=status_box.text)
-                 
-                 # Placeholder for Stop Button (Functionally difficult in blocking script, 
-                 # but we handle Script Stop via finally)
-                 try:
-                     with st.spinner("Downloading Whisper Model... (Check Console for Progress)"):
-                         wx_path = dl.run()
-                 except (KeyboardInterrupt, SystemExit, Exception) as e:
-                     dl.cancel()
-                     if isinstance(e, KeyboardInterrupt): os._exit(0) # Pass through
-                     raise e
             
             model_w = whisperx.load_model(wx_path, device, compute_type="float16")
             audio = whisperx.load_audio(video_path)

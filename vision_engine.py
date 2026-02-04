@@ -116,7 +116,7 @@ class GGUFVisionEngine:
             
         model_root = download_model(self.repo_id, self.models_dir, specific_files=targets, log_callback=log_callback)
         
-        m_path = os.path.join(model_root, self.model_file)
+        m_path = os.path.normpath(os.path.join(model_root, self.model_file))
         
         if log_callback: log_callback(f"🧠 Loading GGUF: {self.model_file}...")
         
@@ -125,7 +125,7 @@ class GGUFVisionEngine:
         
         p_path = None
         if self.projector_file:
-            p_path = os.path.join(model_root, self.projector_file)
+            p_path = os.path.normpath(os.path.join(model_root, self.projector_file))
             if not os.path.exists(p_path): raise FileNotFoundError(f"Projector file missing: {p_path}")
 
         if p_path:
@@ -153,9 +153,7 @@ class GGUFVisionEngine:
         if not instruction.strip(): instruction = "Describe this {type} in high detail."
         final_prompt = instruction.replace("{trigger}", trigger if trigger else "").replace("{type}", "video" if content_type == "video" else "image")
         
-        # Determine GGUF Video Strategy
-        # User Logic: If no "vl" in name (or if it's Gemma), force frame sampling.
-        # Otherwise, assume single-frame/native (currently single-frame is our default fallback for GGUF video).
+        # Content processing strategy
         is_video = (content_type == "video")
         force_frames = False
         
@@ -263,9 +261,7 @@ class TransformersVisionEngine:
         
         if log_callback: log_callback(f"🧠 Loading Transformers Model: {self.model_id}...")
         
-        # Load Code
         try:
-             # Standard Load
             self.model = AutoModelForVision2Seq.from_pretrained(
                 path,
                 device_map=self.device,
@@ -309,8 +305,6 @@ class TransformersVisionEngine:
         
         # Preprocessing
         text = self.processor.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
-        # Only process vision info if we rely on native loading (Qwen), NOT for Gemma pre-sampled list ?? 
-        # Actually process_vision_info usually handles lists of PIL images too.
         image_inputs, video_inputs = process_vision_info(messages)
         
         inputs = self.processor(

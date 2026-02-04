@@ -10,9 +10,35 @@ import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import queue
-import ctypes # For _nuke_threads, dangerous but sometimes necessary
 import sys
+import signal
 from tqdm import tqdm
+import ctypes
+try:
+    from ctypes import wintypes
+except ImportError:
+    wintypes = None
+
+# --- ABSOLUTE NUCLEAR WINDOWS SHUTDOWN (API LEVEL) ---
+if os.name == 'nt' and wintypes:
+    # Use SetConsoleCtrlHandler to catch Ctrl+C even in worker threads
+    PHANDLER_ROUTINE = ctypes.WINFUNCTYPE(wintypes.BOOL, wintypes.DWORD)
+    
+    def windows_ctrl_handler(ctrl_type):
+        # 0 is CTRL_C_EVENT, 1 is CTRL_BREAK_EVENT, 2 is CTRL_CLOSE_EVENT
+        if ctrl_type in (0, 1, 2):
+            sys.stdout.write("\n🛑 NUCLEAR SHUTDOWN: TERMINATING IMMEDIATELY...\n")
+            sys.stdout.flush()
+            # Absolute hard kill
+            ctypes.windll.kernel32.ExitProcess(1)
+            return True
+        return False
+
+    # Keep reference to preventing GC
+    _handler_ref = PHANDLER_ROUTINE(windows_ctrl_handler)
+    if not ctypes.windll.kernel32.SetConsoleCtrlHandler(_handler_ref, True):
+        print("⚠️ Warning: Could not register Windows nuclear handler.")
+
 
 # Configuration
 CHUNK_SIZE = 1024 * 1024  # 1MB buffer for streaming
@@ -22,7 +48,8 @@ MAX_PARALLEL_FILES = 4  # How many files to start at once
 
 def list_repo_files(model_id):
     """
-    Fetch file list from HF API directly (bypassing hf_hub dependency/offline checks).
+    Fetches the list of files from a Hugging Face model repository.
+    Bypasses hf_hub dependency/offline checks by using the HF API directly.
     """
     url = f"https://huggingface.co/api/models/{model_id}/tree/main?recursive=true"
     try:
@@ -34,28 +61,36 @@ def list_repo_files(model_id):
         raise RuntimeError(f"Failed to list repo files for {model_id}: {e}")
 
 class ModelDownloader:
+    """
+    Manages the download of files from a Hugging Face model repository.
+    Supports multi-connection downloads for large files and parallel file downloads.
+    """
     def __init__(self, model_id, target_base_dir, specific_files=None, log_callback=None):
         self.model_id = model_id
-        self.dest_path = os.path.join(target_base_dir, model_id)
+        self.dest_path = os.path.normpath(os.path.join(target_base_dir, model_id))
         self.specific_files = specific_files
         self.log_callback = log_callback
         self.shutdown_event = threading.Event()
-        self.threads = [] # To keep track of all spawned threads for potential nuke
+        self.threads = [] # Tracks spawned threads
         self.error = None
         self.is_running = False
         self.is_cancelled = False
         self.is_completed = False
         self.total_files_to_download = 0
         self.files_downloaded_count = 0
-        self.current_file_progress = {} # {filename: percent}
+        self.current_file_progress = {}
 
     def log(self, msg):
+        """Logs a message to console and an optional callback."""
         print(msg)
         if self.log_callback:
             try: self.log_callback(msg)
             except: pass
 
     def _download_single_file(self, url, local_path):
+        """
+        Downloads a single file, supporting retries and multi-connection for large files.
+        """
         if self.shutdown_event.is_set(): return False
         
         part_path = local_path + ".part"
@@ -65,13 +100,13 @@ class ModelDownloader:
             try:
                 if self.shutdown_event.is_set(): return False
                 
-                # Check headers
+                # Check headers to get total size and range support
                 try:
                     res = requests.head(url, allow_redirects=True, timeout=10)
                     total_size = int(res.headers.get("content-length", 0))
                     accept_ranges = res.headers.get("accept-ranges") == "bytes"
                 except:
-                    # Fallback if HEAD fails but url might be valid (or timeout)
+                    # Fallback if HEAD fails
                     total_size = 0
                     accept_ranges = False
 
@@ -92,7 +127,6 @@ class ModelDownloader:
                         f.truncate(total_size)
                         
                     downloaded = 0
-                    last_reported_percent = 0
                     lock = threading.Lock()
                     
                     with tqdm(total=total_size, unit='B', unit_scale=True, desc=f"   {filename}", file=sys.stdout, dynamic_ncols=True) as pbar:
@@ -135,7 +169,7 @@ class ModelDownloader:
 
                         for t in seg_threads:
                             while t.is_alive():
-                                t.join(timeout=0.05) # Even faster check
+                                t.join(timeout=0.05) # Short timeout to check shutdown_event
                                 if self.shutdown_event.is_set(): break
                         
                         if self.shutdown_event.is_set(): 
@@ -152,7 +186,6 @@ class ModelDownloader:
                     response.raise_for_status()
                     
                     downloaded = 0
-                    last_reported = 0
                     with open(part_path, "wb") as f:
                         with tqdm(total=total_size, unit='B', unit_scale=True, desc=f"   {filename}", file=sys.stdout, dynamic_ncols=True) as pbar:
                             for chunk in response.iter_content(chunk_size=CHUNK_SIZE):
@@ -164,7 +197,7 @@ class ModelDownloader:
                                     if total_size > 0:
                                         self.current_file_progress[filename] = int(downloaded/total_size * 100)
 
-                # 3. Atomic Rename (Only if not stopped)
+                # Atomic Rename (if not stopped)
                 if self.shutdown_event.is_set():
                     if os.path.exists(part_path):
                         try: os.remove(part_path)
@@ -185,13 +218,18 @@ class ModelDownloader:
         if os.path.exists(part_path):
             try: os.remove(part_path)
             except: pass
+        return False
 
 
     def run(self):
+        """
+        Initiates the download process for the model.
+        Checks for existing files, queues downloads, and manages worker threads.
+        """
         self.is_running = True
         os.makedirs(self.dest_path, exist_ok=True)
         
-        # Offline-First: Check if files already exist (Strong check)
+        # Offline-First: Check if files already exist
         if self.specific_files and all(os.path.exists(os.path.join(self.dest_path, f)) for f in self.specific_files):
             self.log(f"✅ Model {self.model_id} found locally.")
             self.is_completed = True
@@ -207,7 +245,7 @@ class ModelDownloader:
                  self.is_running = False
                  return self.dest_path
             else:
-                 # If we have specific files, check they all exist despite the flag
+                 # If specific files are requested, verify their existence despite the flag
                  if all(os.path.exists(os.path.join(self.dest_path, f)) for f in self.specific_files):
                      self.log(f"✅ Model {self.model_id} verified locally.")
                      self.is_completed = True
@@ -217,7 +255,7 @@ class ModelDownloader:
         self.log(f"🔎 Validating / Downloading: {self.model_id}\n   (Check console log for progress bars)")
         
         try:
-            # 1. Fetch List
+            # 1. Fetch List of files from repo
             available_files = list_repo_files(self.model_id)
             
             if self.specific_files:
@@ -228,7 +266,7 @@ class ModelDownloader:
 
             self.total_files_to_download = len(files_to_download)
             
-            # 2. Queue
+            # 2. Queue files for download
             q = queue.Queue()
             for f in files_to_download: q.put(f)
 
@@ -243,27 +281,29 @@ class ModelDownloader:
                     
                     try:
                         file_url = f"https://huggingface.co/{self.model_id}/resolve/main/{f_name}?download=true"
-                        local = os.path.join(self.dest_path, f_name)
+                        local = os.path.normpath(os.path.join(self.dest_path, f_name))
                         os.makedirs(os.path.dirname(local), exist_ok=True)
                         
                         if os.path.exists(local):
-                            # TODO: consider checksum
                             with results_lock:
                                 self.files_downloaded_count += 1
                             self.log(f"   ✅ Verified: {f_name} ({self.files_downloaded_count}/{self.total_files_to_download})")
                         else:
+                            # Start fresh: Remove any stale .part files
+                            part_file = local + ".part"
+                            if os.path.exists(part_file):
+                                try: os.remove(part_file)
+                                except: pass
+                                
                             if self._download_single_file(file_url, local):
                                 with results_lock:
                                     self.files_downloaded_count += 1
                                 self.log(f"   ✅ Downloaded: {f_name} ({self.files_downloaded_count}/{self.total_files_to_download})")
                             else:
-                                # If download failed or was cancelled, don't increment success count
                                 self.log(f"   ⚠️ Warning: {f_name} failed or cancelled.")
-                                # Mark as failed in progress tracking
                                 self.current_file_progress[f_name] = -1 
-                                # If shutdown event is set, we don't want to raise an error, just exit gracefully
                                 if self.shutdown_event.is_set():
-                                    break # Exit worker loop
+                                    break 
                     except Exception as e:
                         self.log(f"   ❌ Error processing {f_name}: {e}")
                         self.current_file_progress[f_name] = -1
@@ -279,7 +319,7 @@ class ModelDownloader:
                 workers.append(t)
                 self.threads.append(t) # Track for kill
 
-            # Wait for threads but allowing Ctrl+C / shutdown_event
+            # Wait for threads, allowing Ctrl+C / shutdown_event
             for t in workers:
                 while t.is_alive():
                     t.join(timeout=0.1) # Short timeout allows checking for shutdown_event
@@ -299,8 +339,10 @@ class ModelDownloader:
             
             if self.shutdown_event.is_set():
                 self.is_cancelled = True
-                # Force exit for reliability, especially on Windows
-                os._exit(1) # The "Nuclear" option requested by user
+                if os.name == 'nt':
+                    os._exit(1) 
+                else:
+                    sys.exit(1)
                 
             if self.files_downloaded_count == self.total_files_to_download:
                 with open(complete_flag, "w") as f:
@@ -312,6 +354,8 @@ class ModelDownloader:
                 raise RuntimeError(f"Download incomplete: {self.files_downloaded_count}/{self.total_files_to_download} files downloaded.")
 
         except KeyboardInterrupt:
+            if os.name == 'nt':
+                os._exit(1)
             self.cancel()
             self.error = "Download cancelled by user."
             raise  
@@ -325,35 +369,19 @@ class ModelDownloader:
             self.shutdown_event.set()
 
     def cancel(self):
+        """Signals all download operations to stop."""
         if not self.is_running and not self.is_completed:
             self.log("Download not running or already completed/cancelled.")
             return
         self.log("\n🛑 ABORTING DOWNLOAD...")
         self.shutdown_event.set()
         self.is_cancelled = True
-        # Optional: The Nuclear Option (use with extreme caution)
-        # self._nuke_threads() 
-
-    def _nuke_threads(self):
-        # DANGEROUS: Use only if threads are unresponsive and preventing shutdown
-        # This can lead to corrupted data or crashes.
-        self.log("Attempting to forcefully terminate download threads (DANGEROUS!)...")
-        for t in self.threads:
-            if t.is_alive():
-                try:
-                    # This is a non-standard, platform-specific way to kill threads.
-                    # It's generally not recommended in Python.
-                    # but hanging the console until a 10GB file finishes downloading is not an option.
-                    ctypes.pythonapi.PyThreadState_SetAsyncExc(
-                        ctypes.c_long(t.ident), 
-                        ctypes.py_object(SystemExit)
-                    )
-                    self.log(f"  Forcefully terminated thread {t.ident}")
-                except Exception as e:
-                    self.log(f"  Failed to terminate thread {t.ident}: {e}")
 
 # Compatibility Wrapper
 def download_model(model_id, target_base_dir, specific_files=None, log_callback=None):
+    """
+    Convenience function to download a Hugging Face model.
+    """
     downloader = ModelDownloader(model_id, target_base_dir, specific_files, log_callback)
     return downloader.run()
 
