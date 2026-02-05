@@ -500,4 +500,4 @@ else:
         st.info(f"⏱️ Total Execution Time: {int(mins)}m {int(secs)}s")
 
 st.markdown("---")
-st.markdown("<center><b><a href='https://github.com/cyberbol/AI-Video-Clipper-LoRA'>An Open Source Project</a></b></center>", unsafe_allow_html=True)
+st.markdown("<div style='text-align: center'><a href='https://github.com/cyberbol/AI-Video-Clipper-LoRA'>An Open Source Project</a></div>", unsafe_allow_html=True)

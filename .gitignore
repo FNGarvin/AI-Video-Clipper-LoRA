@@ -13,6 +13,12 @@ __pycache__/
 # They waste bandwidth and storage if committed to git.
 models/
 
+# Wheels
+# Reason: This folder contains binary modules that can be quite large (eg, 
+# llama-cpp-python, which includes llama.cpp and the nvidia extensions)
+# we download them on the fly as appropriate instead of including in main repo
+wheels/
+
 # Dataset Output (Wildcard to catch all variations)
 dataset*/
 
