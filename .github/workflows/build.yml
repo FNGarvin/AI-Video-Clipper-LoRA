@@ -3,10 +3,20 @@ name: Container Build
 
 on:
   push:
-    branches: [ "main", "v5-staging", "infra/*" ]
+    branches: [ "main", "infra/*" ]
     tags: [ "v*" ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'notes/**'
+      - 'LICENSE'
   pull_request:
-    branches: [ "v5-staging" ]
+    branches: [ "v5-staging", "main" ]
+    paths-ignore:
+      - '**.md'
+      - 'docs/**'
+      - 'notes/**'
+      - 'LICENSE'
   workflow_dispatch:
 
 env:
