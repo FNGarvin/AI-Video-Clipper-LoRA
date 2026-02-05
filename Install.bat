@@ -1,5 +1,6 @@
 @echo off
-:: AI Video Clipper & LoRA Captioner - Windows Installer (v4.0 Ready)
+setlocal EnableDelayedExpansion
+:: AI Video Clipper & LoRA Captioner - Windows Installer (v5.0 Staging)
 
 TITLE AI Clipper Installer - UV Edition
 color 0B
@@ -20,21 +21,28 @@ if %errorlevel% neq 0 (
     echo [INFO] uv not found. Installing via winget...
     winget install astral-sh.uv --accept-source-agreements --accept-package-agreements
     
-    :: SEARCH STRATEGY:
+    REM SEARCH STRATEGY:
+    REM 1. Standard Winget Links (Symlinks)
     if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links\uv.exe" (
         set "PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
     )
+    
+    REM 2. Dynamic Winget Package Folder (finding the folder ending in ...uv_... source)
     for /d %%D in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\astral-sh.uv*") do (
         if exist "%%D\uv.exe" set "PATH=%%D;%PATH%"
     )
+    
+    REM 3. Cargo Bin (fallback)
     if exist "%USERPROFILE%\.cargo\bin\uv.exe" (
         set "PATH=%USERPROFILE%\.cargo\bin;%PATH%"
     )
+    
+    REM 4. User-specific valid path from previous runs?
     if exist "%LOCALAPPDATA%\uv\uv.exe" (
          set "PATH=%LOCALAPPDATA%\uv;%PATH%"
     )
 
-    :: Verify installation
+    REM Verify installation
     uv --version >nul 2>&1
     if %errorlevel% neq 0 (
         echo.
@@ -69,7 +77,7 @@ if "%RESET_VENV%"=="true" (
 )
 
 if not exist ".venv" (
-    uv venv .venv --python 3.10 --link-mode hardlink
+    uv venv .venv --python 3.10 --seed --managed-python --link-mode hardlink
 )
 
 :: --------------------------------------------------------------------
@@ -81,11 +89,15 @@ if %errorlevel% neq 0 (
     echo [INFO] FFmpeg not found. Installing via winget...
     winget install Gyan.FFmpeg --accept-source-agreements --accept-package-agreements
     
+    REM ATTEMPT DYNAMIC PATH REFRESH
+    REM 1. Standard Winget Links (Symlinks)
     if exist "%LOCALAPPDATA%\Microsoft\WinGet\Links\ffmpeg.exe" (
         set "PATH=%LOCALAPPDATA%\Microsoft\WinGet\Links;%PATH%"
         echo [INFO] Added Winget Links to PATH for this session.
     )
 
+    REM 2. Robust Search for Gyan.FFmpeg Package (Deep Search)
+    REM User Path: %LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg_...\ffmpeg-*-full_build\bin
     for /d %%P in ("%LOCALAPPDATA%\Microsoft\WinGet\Packages\Gyan.FFmpeg_*") do (
         echo [INFO] Found Legacy Package: %%~nxP
         for /d %%B in ("%%P\ffmpeg-*-full_build") do (
@@ -96,6 +108,7 @@ if %errorlevel% neq 0 (
         )
     )
     
+    REM Verify
     where ffmpeg >nul 2>&1
     if %errorlevel% neq 0 (
         echo [WARNING] FFmpeg installed but not detected in current session.
@@ -115,6 +128,7 @@ if not exist ".streamlit\config.toml" (
         echo.
         echo [server]
         echo headless = true
+        echo maxUploadSize = 4096
     ) > .streamlit\config.toml
 )
 
@@ -126,11 +140,20 @@ uv pip install ^
     --link-mode hardlink ^
     "torch==2.10.0+cu128" "torchvision==0.25.0+cu128" "torchaudio==2.10.0+cu128"
 
+echo [INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)...
+set "WIN_WHEEL_URL=https://github.com/FNGarvin/AI-Video-Clipper-LoRA/releases/download/bin-lcp-0.3.23-cu128/llama_cpp_python-0.3.23+cu128-cp310-cp310-win_amd64.whl"
+echo [INFO] Installing verified CUDA 12.8 wheel from release...
+uv pip install "%WIN_WHEEL_URL%" --force-reinstall
+
+
 echo.
 echo [STEP 3/3] Installing AI Stack...
 uv pip install "git+https://github.com/m-bain/whisperX.git" --no-deps --link-mode hardlink
 
-echo [INFO] Syncing basic dependencies from pyproject.toml...
+echo [INFO] Ensuring correct CTranslate2 (Windows) - Pinning <4.7.0 to avoid ROCm bug...
+uv pip install "ctranslate2<4.7.0" --index-url https://pypi.org/simple --force-reinstall
+
+echo [INFO] Syncing remaining dependencies from pyproject.toml...
 uv pip install -r pyproject.toml --extra-index-url https://download.pytorch.org/whl/cu128 --link-mode hardlink
 
 :: --- NOWA SEKCJA v4.0 ---
@@ -140,6 +163,10 @@ echo [INFO] Adding librosa, soundfile and updating transformers...
 uv pip install librosa soundfile numpy --link-mode hardlink
 uv pip install --upgrade transformers accelerate huggingface_hub --link-mode hardlink
 :: ------------------------
+
+echo.
+echo [CHECK] Verifying GPU Acceleration...
+.venv\Scripts\python -c "from llama_cpp import llama_supports_gpu_offload; print(f'>>> GPU Offload Supported: {llama_supports_gpu_offload()}')"
 
 echo.
 echo ======================================================================

@@ -47,7 +47,7 @@ if [ "$RESET_VENV" = true ]; then
 fi
 
 if [ ! -d ".venv" ]; then
-    uv venv .venv --python 3.10 --link-mode hardlink
+    uv venv .venv --python 3.10 --seed --managed-python --link-mode hardlink
 fi
 source .venv/bin/activate
 
@@ -60,6 +60,7 @@ if [ ! -f ".streamlit/config.toml" ]; then
 gatherUsageStats = false
 [server]
 headless = true
+maxUploadSize = 4096
 EOL
 fi
 
@@ -74,10 +75,31 @@ uv pip install \
     --link-mode hardlink \
     "git+https://github.com/m-bain/whisperX.git" --no-deps
 
-echo "[INFO] Syncing remaining dependencies from pyproject.toml..."
+echo "[INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)..."
+LINUX_WHEEL_URL="https://github.com/FNGarvin/AI-Video-Clipper-LoRA/releases/download/bin-lcp-0.3.23-cu128/llama_cpp_python-0.3.23+cu128-cp310-cp310-linux_x86_64.whl"
+echo "[INFO] Installing verified CUDA 12.8 wheel from release..."
+uv pip install "$LINUX_WHEEL_URL" --force-reinstall
+
+
+# Fix for ROCm/Linux compatibility or just general stability matching Windows
+echo "[INFO] Ensuring correct CTranslate2 - Pinning <4.7.0..."
+uv pip install "ctranslate2<4.7.0" --index-url https://pypi.org/simple --force-reinstall
+
+echo "[INFO] Syncing basic dependencies from pyproject.toml..."
 uv pip install \
     --link-mode hardlink \
     -r pyproject.toml --extra-index-url https://download.pytorch.org/whl/cu128
+
+echo ""
+echo "[STEP 3.5] Installing Audio Intelligence Stack (Qwen2-Audio Support)..."
+echo "[INFO] Adding librosa, soundfile and updating transformers..."
+uv pip install librosa soundfile numpy --link-mode hardlink
+uv pip install --upgrade transformers accelerate huggingface_hub --link-mode hardlink
+
+
+echo ""
+echo "[CHECK] Verifying GPU Acceleration..."
+.venv/bin/python -c "from llama_cpp import llama_supports_gpu_offload; print(f'>>> GPU Offload Supported: {llama_supports_gpu_offload()}')"
 
 echo "======================================================================"
 echo "Installation complete!"
