@@ -57,7 +57,6 @@ os.environ["HF_HOME"] = MODELS_DIR
 st.set_page_config(page_title="AI Clipper v5.0", layout="wide")
 st.title("👁️🐧👂 AI Video Clipper & LoRA Captioner")
 st.markdown("v5.0 Staging | **Cyberbol** (Logic) | **FNGarvin** (Engine) | **WildSpeaker** (Fixes)")
-# Cache Verification: [Tested on 2026-02-05]
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
