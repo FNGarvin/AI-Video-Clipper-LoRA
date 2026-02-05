@@ -141,7 +141,7 @@ uv pip install ^
     "torch==2.10.0+cu128" "torchvision==0.25.0+cu128" "torchaudio==2.10.0+cu128"
 
 echo [INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)...
-set "WIN_WHEEL_URL=https://github.com/FNGarvin/AI-Video-Clipper-LoRA/releases/download/bin-lcp-0.3.23-cu128/llama_cpp_python-0.3.23+cu128-cp310-cp310-win_amd64.whl"
+set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.23+cu128-cp310-cp310-win_amd64.whl"
 echo [INFO] Installing verified CUDA 12.8 wheel from release...
 uv pip install "%WIN_WHEEL_URL%" --force-reinstall
 

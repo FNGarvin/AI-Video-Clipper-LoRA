@@ -76,7 +76,7 @@ uv pip install \
     "git+https://github.com/m-bain/whisperX.git" --no-deps
 
 echo "[INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)..."
-LINUX_WHEEL_URL="https://github.com/FNGarvin/AI-Video-Clipper-LoRA/releases/download/bin-lcp-0.3.23-cu128/llama_cpp_python-0.3.23+cu128-cp310-cp310-linux_x86_64.whl"
+LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.23+cu128-cp310-cp310-linux_x86_64.whl"
 echo "[INFO] Installing verified CUDA 12.8 wheel from release..."
 uv pip install "$LINUX_WHEEL_URL" --force-reinstall
 
