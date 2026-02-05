@@ -15,7 +15,7 @@ jobs:
           fetch-depth: 0
 
       - name: Sourcery Review
-        uses: sourcery-ai/action@v1
+        uses: sourcery-ai/action@209351e064972f10b784ff57d4469a8b13d2f939 # v1
         with:
           token: ${{ secrets.SOURCERY_TOKEN }}
           # This forces the bot to post the summary and diagrams to the PR
