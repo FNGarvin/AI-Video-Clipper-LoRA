@@ -82,7 +82,7 @@ COPY . .
 
 # Apply privacy settings and Runpod Proxy fixes (CORS/XSRF)
 RUN mkdir -p .streamlit && \
-    echo "[browser]\ngatherUsageStats = false\n[server]\nheadless = true\nenableCORS = false\nenableXsrfProtection = false" > .streamlit/config.toml
+    echo "[browser]\ngatherUsageStats = false\n[server]\nheadless = true\nmaxUploadSize = 4096\nenableCORS = false\nenableXsrfProtection = false" > .streamlit/config.toml
 
 # Set up local model paths
 ENV HF_HOME="/workspace/models"
