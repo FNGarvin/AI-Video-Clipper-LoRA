@@ -369,21 +369,22 @@ def scan_local_gguf_models(models_dir):
         ggufs = [f for f in files if f.endswith(".gguf") and not f.lower().startswith("mmproj-")]
         projectors = [f for f in files if f.lower().startswith("mmproj-") and f.endswith(".gguf")]
         
-        if ggufs:
+        if ggufs and projectors:
             rel_root = os.path.relpath(root, models_dir).replace("\\", "/")
-            # Use the first projector found, or None
-            proj_file = projectors[0] if projectors else None
+            # Use the first projector found (Shared strategy)
+            proj_file = projectors[0]
             
-            # User Policy: Only show if BOTH model and projector exist
-            if proj_file:
-                for g in ggufs:
-                    label = f"🔍 Found: {os.path.basename(root)}/{g}"
-                    discovered[label] = {
-                        "backend": "gguf",
-                        "repo": rel_root, # This might be a path if local, or ID if structured
-                        "model": g,
-                        "projector": proj_file
-                    }
+            for g in ggufs:
+                # Clean Label: Filename without extension
+                clean_name = g.replace(".gguf", "")
+                label = f"{clean_name} (local)"
+                
+                discovered[label] = {
+                    "backend": "gguf",
+                    "repo": rel_root, 
+                    "model": g,
+                    "projector": proj_file
+                }
     return discovered
 
 # EOF vision_engine.py

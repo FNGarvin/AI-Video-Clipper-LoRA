@@ -1,6 +1,6 @@
 # 👁️🐧👂 AI Video Clipper & LoRA Captioner (v4.0)
 
-**The ultimate local dataset preparation tool for Video LoRA training (LTX-2, HunyuanVideo).**
+**State of the Art dataset preparation tool for Video LoRA training (LTX-2, HunyuanVideo).**
 *Now featuring Audio Intelligence, 3-Stage Pipeline, and Advanced Bulk Processing.*
 
 ---
@@ -91,12 +91,11 @@ For developers needing to support new CUDA versions or custom model architecture
 ## 🏆 Credits
 
 * **[Cyberbol](https://github.com/cyberbol):** Original Creator & Logic Architect.
-* **[FNGarvin](https://github.com/FNGarvin):** Engine Architect (UV & Linux Systems).
-* **[WildSpeaker7315](https://www.reddit.com/user/WildSpeaker7315/):** Hardware Research & Fixes.
+* **[FNGarvin](https://github.com/FNGarvin):** Engine Architect (Back-end Systems).
+* **[WildSpeaker7315](https://www.reddit.com/user/WildSpeaker7315/):** He owns a 5090!
 
 ---
 <div align="center">
   <b>Licensed under MIT - Built for the Community</b>
-
 </div>
 

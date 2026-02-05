@@ -56,7 +56,7 @@ os.environ["HF_HOME"] = MODELS_DIR
 # --- 3. UI CONFIG ---
 st.set_page_config(page_title="AI Clipper v5.0", layout="wide")
 st.title("👁️🐧👂 AI Video Clipper & LoRA Captioner")
-st.markdown("v5.0 Staging | **Cyberbol** (Logic) | **FNGarvin** (Engine) | **WildSpeaker** (Fixes)")
+st.markdown("v5.0 | **[Cyberbol](https://github.com/cyberbol/)** (Project Creator) | **[FNG](https://github.com/FNGarvin/)** (Engine) | **WildSpeaker** (Has a 5090!)")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -105,7 +105,7 @@ for label, config in local_ggufs.items():
     if config["model"] not in existing_ggufs:
         model_options[label] = config
 
-model_label = st.sidebar.radio("Vision Model:", list(model_options.keys()), index=2)
+model_label = st.sidebar.selectbox("Vision Model:", list(model_options.keys()), index=2)
 SELECTED_MODEL = model_options[model_label]
 SELECTED_VISION_ID = SELECTED_MODEL.get("id", SELECTED_MODEL.get("model")) # Fallback ID
 
@@ -500,4 +500,4 @@ else:
         st.info(f"⏱️ Total Execution Time: {int(mins)}m {int(secs)}s")
 
 st.markdown("---")
-st.markdown("<center><b>Project maintained by Cyberbol, Powered by FNGarvin</b></center>", unsafe_allow_html=True)
+st.markdown("<center><b><a href='https://github.com/cyberbol/AI-Video-Clipper-LoRA'>An Open Source Project</a></b></center>", unsafe_allow_html=True)
