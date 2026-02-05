@@ -27,36 +27,14 @@ COPY pyproject.toml .
 
 # Create venv and install dependencies
 # We use Python 3.10 as requested in install.sh
-RUN uv venv .venv --python 3.10
-ENV PATH="/workspace/.venv/bin:$PATH"
+# Copy install script
+COPY install.sh .
+RUN chmod +x install.sh
 
-# Install Torch Engine (matching install.sh)
-# Install Torch Engine (matching install.sh)
+# Run Installer (Uses cache mount for speed)
+# This ensures 100% parity with the Linux install script
 RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install \
-    --index-url https://download.pytorch.org/whl/cu128 \
-    "torch==2.10.0+cu128" \
-    "torchvision==0.25.0+cu128" \
-    "torchaudio==2.10.0+cu128"
-
-# Install AI Stack (WhisperX)
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install \
-    "git+https://github.com/m-bain/whisperX.git" --no-deps
-
-# Install CTranslate2 pinned (rocm/linux fix)
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install "ctranslate2<4.7.0" --index-url https://pypi.org/simple --force-reinstall
-
-# Install Audio Intelligence Stack (Qwen2-Audio Support)
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install librosa soundfile numpy && \
-    uv pip install --upgrade transformers accelerate huggingface_hub
-
-# Sync remaining dependencies
-RUN --mount=type=cache,target=/root/.cache/uv \
-    uv pip install \
-    -r pyproject.toml --extra-index-url https://download.pytorch.org/whl/cu128
+    ./install.sh
 
 
 # --- MULTI-SERVICE INTEGRATION (Appended to preserve cache) ---
