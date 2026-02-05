@@ -239,7 +239,7 @@ if app_mode == "🎥 Video Auto-Clipper":
 
             check_clip = VideoFileClip(video_path); video_duration = check_clip.duration; check_clip.close(); del check_clip
 
-            model_w = whisperx.load_model(wx_path, device, compute_type="float16")
+            model_w = whisperx.load_model(wx_path, device, compute_type="float16", asr_options={"n_mels": 128})
             audio_source = whisperx.load_audio(video_path)
             result = model_w.transcribe(audio_source, batch_size=16)
             
