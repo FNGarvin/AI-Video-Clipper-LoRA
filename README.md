@@ -60,6 +60,18 @@ Standard mode for captioning datasets of images using powerful, vision-capable L
 1.  Run `./install.sh`.
 2.  Run `./run.sh`.
 
+### 🐳 Docker / Container
+Ideally suited for headless servers or easy deployment.
+1.  **Pull the Image**:
+    ```bash
+    docker pull ghcr.io/cyberbol/ai-video-clipper-lora:latest
+    ```
+2.  **Run with GPU Support**:
+    ```bash
+    docker run --gpus all -p 8501:8501 -v $(pwd):/workspace/projects ghcr.io/cyberbol/ai-video-clipper-lora:latest
+    ```
+    *(Note: Ensure you have the `nvidia-container-toolkit` installed on your host system).*
+
 ### ☁️ Cloud / RunPod
 For those who prefer processing datasets on high-VRAM cloud GPUs, an illustrated [RunPod Deployment Guide](docs/RUNPOD-HOWTO.md) is available to walk you through the setup.
 
