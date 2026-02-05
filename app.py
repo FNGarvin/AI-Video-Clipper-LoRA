@@ -309,7 +309,7 @@ if app_mode == "🎥 Video Auto-Clipper":
 
             # === PHASE 3: VISION & MERGE ===
             status_box.info("👁️ **Phase 3/3: Vision Captioning & Merging**...")
-            folder_name = project_name.strip() if project_name.strip() else f"dataset_{target_dur}s"
+            folder_name = project_name.strip() or f"dataset_{target_dur}s"
             out_dir = os.path.join(BASE_DIR, folder_name); os.makedirs(out_dir, exist_ok=True)
             
             st.success(f"Found {len(final_segments)} clips. Saving to: {out_dir}") 
@@ -338,12 +338,13 @@ if app_mode == "🎥 Video Auto-Clipper":
                 if enable_hard_cut:
                     valid_words = [w['word'] for w in all_words_global if w['start'] >= seg['start'] and w['end'] <= cut_end]
                     speech = " ".join(valid_words).strip()
-                    if not speech: speech = seg['text'].strip()
+                    speech = " ".join(valid_words).strip() or seg['text'].strip()
                 else: speech = seg['text'].strip()
                 
-                aud_cap = audio_captions_map.get(i, "").strip()
-                if aud_cap: final_text = f"{vis_cap} In the background, {aud_cap}. The character says: \"{speech}\""
-                else: final_text = f"{vis_cap} The character says: \"{speech}\""
+                if aud_cap := audio_captions_map.get(i, "").strip():
+                    final_text = f"{vis_cap} In the background, {aud_cap}. The character says: \"{speech}\""
+                else:
+                    final_text = f"{vis_cap} The character says: \"{speech}\""
                 
                 final_text = final_text.replace("..", ".").replace("  ", " ").strip()
                 
@@ -370,7 +371,9 @@ elif app_mode == "📝 Bulk Video Captioner":
     with col_vbtn:
         if st.button("📂 Select Folder"):
             sel = select_folder_dialog()
-            if sel: st.session_state['v_bulk_path'] = sel; st.rerun()
+            if sel := select_folder_dialog():
+                st.session_state['v_bulk_path'] = sel
+                st.rerun()
     with col_v: v_dir = st.text_input("Folder Path:", value=st.session_state['v_bulk_path'])
     
     st.markdown("### 🛠️ Bulk Processing Options")
@@ -466,8 +469,9 @@ else:
     col_p, col_b = st.columns([3, 1])
     with col_b:
         if st.button("📂 Select Folder"):
-            sel = select_folder_dialog()
-            if sel: st.session_state['img_path'] = sel; st.rerun()
+            if sel := select_folder_dialog():
+                st.session_state['img_path'] = sel
+                st.rerun()
     with col_p: img_dir = st.text_input("Path:", value=st.session_state['img_path'])
     
     if st.button("🚀 CAPTION FOLDER") and os.path.exists(img_dir):
