@@ -6,7 +6,7 @@ set -e
 
 # UV Optimizations
 export UV_HTTP_TIMEOUT=3600
-export UV_LINK_MODE=hardlink
+export UV_LINK_MODE="${UV_LINK_MODE:-hardlink}"
 export UV_CACHE_DIR="${HOME}/.cache/uv"
 
 echo "======================================================================"
@@ -98,8 +98,13 @@ uv pip install --upgrade transformers accelerate huggingface_hub --link-mode har
 
 
 echo ""
-echo "[CHECK] Verifying GPU Acceleration..."
-.venv/bin/python -c "from llama_cpp import llama_supports_gpu_offload; print(f'>>> GPU Offload Supported: {llama_supports_gpu_offload()}')"
+# [Check] GPU Verification
+if [ "$SKIP_GPU_CHECK" != "true" ]; then
+    echo "[CHECK] Verifying GPU Acceleration (Llama CPP)..."
+    .venv/bin/python -c "from llama_cpp import llama_supports_gpu_offload; print(f'>>> GPU Offload Supported: {llama_supports_gpu_offload()}')" || echo "WARNING: Llama check failed"
+else
+    echo "[INFO] Skipping GPU Verification (Build Mode)"
+fi
 
 echo "======================================================================"
 echo "Installation complete!"

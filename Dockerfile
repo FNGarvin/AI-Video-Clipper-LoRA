@@ -32,8 +32,11 @@ COPY install.sh .
 RUN chmod +x install.sh
 
 # Run Installer (Uses cache mount for speed)
-# This ensures 100% parity with the Linux install script
+# - SKIP_GPU_CHECK: Prevents failure on CPU-only build runners
+# - UV_LINK_MODE: 'copy' avoids cross-filesystem hardlink errors/warnings
 RUN --mount=type=cache,target=/root/.cache/uv \
+    export SKIP_GPU_CHECK=true && \
+    export UV_LINK_MODE=copy && \
     ./install.sh
 
 
