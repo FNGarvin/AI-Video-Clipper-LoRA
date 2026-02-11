@@ -232,14 +232,14 @@ if app_mode == "🎥 Video Auto-Clipper":
             wx_path = os.path.normpath(os.path.join(MODELS_DIR, wx_repo))
             
             # Robust Check
-            essential_wx = ["config.json", "model.bin", "tokenizer.json", "vocabulary.json"]
+            essential_wx = ["config.json", "model.bin", "tokenizer.json", "vocabulary.json", "preprocessor_config.json"]
             if not all(os.path.exists(os.path.join(wx_path, f)) for f in essential_wx):
                 with st.spinner("Ensuring Whisper Model (Downloader Active)..."):
                     wx_path = download_model(wx_repo, MODELS_DIR, specific_files=essential_wx, log_callback=status_box.text)
 
             check_clip = VideoFileClip(video_path); video_duration = check_clip.duration; check_clip.close(); del check_clip
 
-            model_w = whisperx.load_model(wx_path, device, compute_type="float16", asr_options={"n_mels": 128})
+            model_w = whisperx.load_model(wx_path, device, compute_type="float16")
             audio_source = whisperx.load_audio(video_path)
             result = model_w.transcribe(audio_source, batch_size=16)
             
@@ -401,7 +401,7 @@ elif app_mode == "📝 Bulk Video Captioner":
                         # Ensure model
                         wx_repo = "Systran/faster-whisper-large-v3"
                         wx_path = os.path.normpath(os.path.join(MODELS_DIR, wx_repo))
-                        essential_wx = ["config.json", "model.bin", "tokenizer.json", "vocabulary.json"]
+                        essential_wx = ["config.json", "model.bin", "tokenizer.json", "vocabulary.json", "preprocessor_config.json"]
                         if not all(os.path.exists(os.path.join(wx_path, f)) for f in essential_wx):
                              with st.spinner("Ensuring Whisper Model..."):
                                  wx_path = download_model(wx_repo, MODELS_DIR, specific_files=essential_wx)
