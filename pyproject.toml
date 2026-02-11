@@ -19,5 +19,6 @@ dependencies = [
     "tqdm",
     "pyannote.audio",
     "huggingface_hub",
+    "compressed-tensors",
 ]
 requires-python = ">=3.10"

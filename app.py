@@ -110,7 +110,7 @@ SELECTED_MODEL = model_options[model_label]
 SELECTED_VISION_ID = SELECTED_MODEL.get("id", SELECTED_MODEL.get("model")) # Fallback ID
 
 # Audio Model ID (Fixed for now, can be modularized later)
-SELECTED_AUDIO_ID = "Qwen/Qwen2-Audio-7B-Instruct"
+SELECTED_AUDIO_ID = "mlinmg/Qwen-2-Audio-Instruct-dynamic-fp8"
 
 st.sidebar.divider()
 st.sidebar.markdown("### 📝 Instructions")
@@ -224,7 +224,16 @@ if app_mode == "🎥 Video Auto-Clipper":
             tmp.write(uploaded_file.read()); video_path = tmp.name
         
         try:
+            # === PHASE 0: CLEAN SLATE ===
+            # Force unload any existing engines to free VRAM for Whisper
+            if 'vision_engine' in st.session_state and st.session_state['vision_engine']:
+                st.session_state['vision_engine'].clear()
+            if 'audio_engine' in st.session_state and st.session_state['audio_engine']:
+                st.session_state['audio_engine'].clear()
+            clear_vram()
+
             # === PHASE 1: WHISPER X ===
+            print(f"\n🚀 [Phase 1] Speech Analysis (WhisperX) started on {video_path}...")
             status_box.info("🚀 **Phase 1/3: Speech Analysis (WhisperX)**...")
             
              # Use downloader to ensure model is present and get local path
@@ -243,16 +252,21 @@ if app_mode == "🎥 Video Auto-Clipper":
             audio_source = whisperx.load_audio(video_path)
             result = model_w.transcribe(audio_source, batch_size=16)
             
-            # Alignment
-            align_model_dir = os.path.join(MODELS_DIR, "PyTorch")
-            model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device, model_dir=align_model_dir)
-            result = whisperx.align(result["segments"], model_a, metadata, audio_source, device)
+            # Alignment (Optional)
+            try:
+                align_model_dir = os.path.join(MODELS_DIR, "PyTorch")
+                model_a, metadata = whisperx.load_align_model(language_code=result["language"], device=device, model_dir=align_model_dir)
+                result = whisperx.align(result["segments"], model_a, metadata, audio_source, device)
+                del model_a, metadata
+            except Exception as e:
+                RuntimeError(f"Alignment Failed: {e}") # refrain from crashing, just log
+                status_box.warning(f"⚠️ Additional Language models not available (Language: {result['language']}) - using standard timestamps.")
             
             all_words_global = []
             for s in result["segments"]:
                 if 'words' in s: all_words_global.extend(s['words'])
 
-            del model_w, model_a, audio_source, metadata
+            del model_w, audio_source
             clear_vram()
             
             # === SEGMENT SELECTION ===
@@ -277,7 +291,14 @@ if app_mode == "🎥 Video Auto-Clipper":
             # === PHASE 2: AUDIO CAPTIONING ===
             audio_captions_map = {}
             if enable_audio_cap:
+                print(f"\n👂 [Phase 2] Audio Analysis started ({len(final_segments)} clips)...")
                 status_box.info(f"👂 **Phase 2/3: Audio Analysis ({len(final_segments)} clips)**...")
+                
+                # Auto-Download Qwen2-Audio if missing
+                # It's better to ensure files locally for offline support
+                with st.spinner("Ensuring Audio Model (Downloader Active)..."):
+                    download_model(SELECTED_AUDIO_ID, MODELS_DIR, log_callback=status_box.text)
+
                 a_engine = load_audio_engine()
                 # Ensure loaded
                 if not a_engine.model:
@@ -302,12 +323,13 @@ if app_mode == "🎥 Video Auto-Clipper":
                             if os.path.exists(tmp_aud_path): os.unlink(tmp_aud_path)
                         prog_a.progress((i+1)/len(final_segments))
                     full_audio_clip.close(); 
-                    # Optionally clear audio engine here to save VRAM for vision?
-                    # a_engine.clear() 
+                    # FREE VRAM: Audio Engine is done, clear it for Vision
+                    a_engine.clear() 
                     clear_vram()
                 else: st.error("Audio Engine Load Error.")
 
             # === PHASE 3: VISION & MERGE ===
+            print(f"\n👁️ [Phase 3] Vision Captioning & Merging started...")
             status_box.info("👁️ **Phase 3/3: Vision Captioning & Merging**...")
             folder_name = project_name.strip() or f"dataset_{target_dur}s"
             out_dir = os.path.join(BASE_DIR, folder_name); os.makedirs(out_dir, exist_ok=True)
