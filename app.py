@@ -125,9 +125,13 @@ audio_prompt = st.sidebar.text_area("Audio Prompt (Qwen2-Audio):", value=audio_p
 
 # --- SIDEBAR: ADVANCED OPTIONS ---
 with st.sidebar.expander("🛠️ Advanced Generation Options"):
-    gen_temp = st.slider("Temperature", 0.0, 1.5, 0.7, 0.1)
-    gen_top_p = st.slider("Top P", 0.0, 1.0, 0.9, 0.05)
-    gen_max_tokens = st.number_input("Max New Tokens", 64, 2048, 256)
+    gen_temp = st.slider("Temperature", 0.0, 1.5, 0.7, 0.1, help="Controls randomness. Higher = creative/chaotic. Lower = focused/deterministic.")
+    gen_top_p = st.slider("Top P", 0.0, 1.0, 0.9, 0.05, help="Nucleus sampling. Restricts generation to the top P probability mass. Lower = more focused.")
+    gen_max_tokens = st.number_input("Max New Tokens", 64, 2048, 256, help="Maximum number of tokens to generate. Increase for longer descriptions.")
+    
+    st.markdown("#### ⚙️ Model Loading (GGUF)")
+    n_ctx_val = st.number_input("Context Window (n_ctx)", 2048, 32768, 8192, step=1024, help="Lower if VRAM is tight.")
+    n_gpu_layers_val = st.number_input("GPU Layers (n_gpu_layers)", -1, 100, -1, help="-1 = All layers to GPU. Reduce if OOM.")
     
 GEN_CONFIG = {
     "temperature": gen_temp,
@@ -143,20 +147,22 @@ def clear_vram():
 # --- 5. MODEL LOADERS (MODULARIZED) ---
 def load_vision_engine():
     """Unified loading using VisionEngine class"""
-    # Check if model changed
-    if 'vision_engine' not in st.session_state or st.session_state.get('last_model_config') != str(SELECTED_MODEL):
+    # Check if model changed or loading config changed
+    current_config = f"{str(SELECTED_MODEL)}_{n_ctx_val}_{n_gpu_layers_val}"
+    
+    if 'vision_engine' not in st.session_state or st.session_state.get('last_model_config') != current_config:
         
         # Clear old
         if 'vision_engine' in st.session_state and st.session_state['vision_engine']:
             st.session_state['vision_engine'].clear()
             
         with st.status(f"🚀 Initializing Vision Engine ({model_label})...", expanded=True) as status:
-            engine = VisionEngine(SELECTED_MODEL, device=device, models_dir=MODELS_DIR)
+            engine = VisionEngine(SELECTED_MODEL, device=device, models_dir=MODELS_DIR, n_ctx=n_ctx_val, n_gpu_layers=n_gpu_layers_val)
             engine.load(log_callback=status.write)
             status.update(label="✅ Vision Engine Ready!", state="complete", expanded=False)
             
         st.session_state['vision_engine'] = engine
-        st.session_state['last_model_config'] = str(SELECTED_MODEL)
+        st.session_state['last_model_config'] = current_config
     
     return st.session_state['vision_engine']
 

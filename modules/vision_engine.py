@@ -58,10 +58,12 @@ class VisionEngine:
     Unified entry point for Vision Models.
     Factory that returns the appropriate engine (GGUF or Transformers) based on config.
     """
-    def __init__(self, model_config, device="cuda", models_dir="models"):
+    def __init__(self, model_config, device="cuda", models_dir="models", n_ctx=8192, n_gpu_layers=-1):
         self.config = model_config
         self.device = device
         self.models_dir = models_dir
+        self.n_ctx = n_ctx
+        self.n_gpu_layers = n_gpu_layers
         self.engine = None
         
         backend = self.config.get("backend", "transformers")
@@ -72,7 +74,9 @@ class VisionEngine:
                 model_file=self.config["model"],
                 projector_file=self.config["projector"],
                 device=device,
-                models_dir=models_dir
+                models_dir=models_dir,
+                n_ctx=self.n_ctx,
+                n_gpu_layers=self.n_gpu_layers
             )
         else:
             self.engine = TransformersVisionEngine(
@@ -97,11 +101,13 @@ class VisionEngine:
 # --------------------------------------------------------------------------------
 
 class GGUFVisionEngine:
-    def __init__(self, repo_id, model_file, projector_file, device="cuda", models_dir="models"):
+    def __init__(self, repo_id, model_file, projector_file, device="cuda", models_dir="models", n_ctx=8192, n_gpu_layers=-1):
         self.repo_id = repo_id
         self.model_file = model_file
         self.projector_file = projector_file
         self.models_dir = models_dir
+        self.n_ctx = n_ctx
+        self.n_gpu_layers = n_gpu_layers
         self.llm = None
         self.chat_handler = None
 
@@ -140,8 +146,8 @@ class GGUFVisionEngine:
         self.llm = Llama(
             model_path=m_path,
             chat_handler=self.chat_handler,
-            n_ctx=8192,  # Increased for video frames
-            n_gpu_layers=-1, # Offload all to GPU
+            n_ctx=self.n_ctx,  # Configurable
+            n_gpu_layers=self.n_gpu_layers, # Configurable
             verbose=False    # Keep checking stdout clean
         )
         if log_callback: log_callback("✅ GGUF Engine Ready.")
