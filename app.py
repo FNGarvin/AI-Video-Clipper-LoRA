@@ -228,10 +228,12 @@ if app_mode == "🎥 Video Auto-Clipper":
         timer_placeholder.info("⏱️ Processing started...")
         status_box = st.empty()
         
-        with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp:
-            tmp.write(uploaded_file.read()); video_path = tmp.name
-        
+        video_path = None
         try:
+            with tempfile.NamedTemporaryFile(delete=False, suffix='.mp4') as tmp:
+                tmp.write(uploaded_file.read()); video_path = tmp.name
+            
+
             # === PHASE 0: CLEAN SLATE ===
             # Force unload any existing engines to free VRAM for Whisper
             if 'vision_engine' in st.session_state and st.session_state['vision_engine']:
@@ -397,6 +399,9 @@ if app_mode == "🎥 Video Auto-Clipper":
         except Exception as e:
             st.error(f"Critical Error: {e}")
             import traceback; st.code(traceback.format_exc())
+        finally:
+            if video_path and os.path.exists(video_path):
+                os.unlink(video_path)
 
 # =================================================================================================
 # MODE 2: BULK VIDEO CAPTIONER
@@ -519,6 +524,10 @@ else:
         start_ts = time.time()
         v_engine = load_vision_engine()
         imgs = [f for f in os.listdir(img_dir) if f.lower().endswith((".png", ".jpg", ".webp"))]
+        
+        if not imgs:
+            st.warning("No images found!")
+            st.stop()
         
         prog = st.progress(0)
         for i, name in enumerate(imgs):

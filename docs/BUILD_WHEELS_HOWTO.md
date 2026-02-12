@@ -4,7 +4,7 @@ This guide provides the workflow for manually building `llama-cpp-python` wheels
 
 ## Prerequisites
 
-* **NVIDIA CUDA Toolkit:** Installed (the version MUST match the one torch et al are using) and `nvcc` available in the system PATH.  You can download it from [here](https://developer.nvidia.com/cuda-downloads).
+* **NVIDIA CUDA Toolkit:** Installed (the version MUST match the one torch et al. are using) and `nvcc` available in the system PATH.  You can download it from [here](https://developer.nvidia.com/cuda-downloads).
 * **C++ Compiler:** * **Windows:** [Visual Studio 2022 Community with C++ workloads](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
     * **Linux:** `gcc`, `g++`, and `cmake`.
 * **Python:** 3.10+ (or whatever the project is using at the time).
