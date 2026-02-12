@@ -78,7 +78,7 @@ uv pip install \
 echo "[INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)..."
 LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.23+cu128-cp310-cp310-linux_x86_64.whl"
 LINUX_WHEEL_SHA256="8d8546cd067a4cd9d86639519dd4833974cdc4603b28753c5195deef08f406cf"
-WHEEL_FILE="llama_cpp_python_cuda.whl"
+WHEEL_FILE="llama_cpp_python-0.3.23+cu128-cp310-cp310-linux_x86_64.whl"
 
 echo "[INFO] Downloading wheel for verification..."
 curl -L -o "$WHEEL_FILE" "$LINUX_WHEEL_URL"
