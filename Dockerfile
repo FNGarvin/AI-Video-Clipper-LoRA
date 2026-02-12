@@ -37,7 +37,7 @@ RUN chmod +x install.sh
 RUN --mount=type=cache,target=/root/.cache/uv \
     export SKIP_GPU_CHECK=true && \
     export UV_LINK_MODE=copy && \
-    ./install.sh
+    ./install.sh --system
 
 
 # --- MULTI-SERVICE INTEGRATION (Appended to preserve cache) ---
