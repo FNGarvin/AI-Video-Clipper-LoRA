@@ -40,7 +40,7 @@ except Exception as e:
 
 def sample_frames(video_path, num_frames=8):
     """Extracts evenly spaced frames from a video."""
-    from moviepy import VideoFileClip
+    from moviepy.video.io.VideoFileClip import VideoFileClip
     clip = VideoFileClip(video_path)
     duration = clip.duration
     timestamps = np.linspace(0, duration, num_frames + 2)[1:-1] # Avoid start/end 
@@ -208,7 +208,8 @@ class GGUFVisionEngine:
                 delta = chunk["choices"][0].get("delta", {})
                 if "content" in delta:
                     full_text += delta["content"]
-                    stream_callback(self._post_process(full_text, trigger))
+                    # Stream raw accumulated text; only post-process once at the end
+                    stream_callback(full_text)
             return self._post_process(full_text, trigger)
         else:
             response = self.llm.create_chat_completion(messages=messages, **params)

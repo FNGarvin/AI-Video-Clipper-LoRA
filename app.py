@@ -265,7 +265,7 @@ if app_mode == "🎥 Video Auto-Clipper":
                 result = whisperx.align(result["segments"], model_a, metadata, audio_source, device)
                 del model_a, metadata
             except Exception as e:
-                RuntimeError(f"Alignment Failed: {e}") # refrain from crashing, just log
+                logging.warning(f"Alignment Failed: {e}") 
                 status_box.warning(f"⚠️ Additional Language models not available (Language: {result['language']}) - using standard timestamps.")
             
             all_words_global = []
@@ -312,26 +312,32 @@ if app_mode == "🎥 Video Auto-Clipper":
                         a_engine.load(log_callback=status_box.text)
                 
                 if a_engine.model:
-                    prog_a = st.progress(0)
-                    full_audio_clip = AudioFileClip(video_path)
-                    for i, seg in enumerate(final_segments[:100]):
-                        cut_end = seg['end'] if not enable_hard_cut else (seg['start'] + target_dur)
-                        with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_aud:
-                            sub_a = full_audio_clip.subclipped(seg['start'], cut_end)
-                            sub_a.write_audiofile(tmp_aud.name, logger=None)
-                            tmp_aud_path = tmp_aud.name
-                        try:
-                            audio_captions_map[i] = a_engine.caption_audio(tmp_aud_path, audio_prompt)
-                        except Exception as e: 
-                            print(f"Audio Cap Error: {e}")
-                            audio_captions_map[i] = ""
-                        finally: 
-                            if os.path.exists(tmp_aud_path): os.unlink(tmp_aud_path)
-                        prog_a.progress((i+1)/len(final_segments))
-                    full_audio_clip.close(); 
-                    # FREE VRAM: Audio Engine is done, clear it for Vision
-                    a_engine.clear() 
-                    clear_vram()
+                    try:
+                        prog_a = st.progress(0)
+                        full_audio_clip = AudioFileClip(video_path)
+                        for i, seg in enumerate(final_segments[:100]):
+                            cut_end = seg['end'] if not enable_hard_cut else (seg['start'] + target_dur)
+                            with tempfile.NamedTemporaryFile(delete=False, suffix='.wav') as tmp_aud:
+                                sub_a = full_audio_clip.subclipped(seg['start'], cut_end)
+                                sub_a.write_audiofile(tmp_aud.name, logger=None)
+                                tmp_aud_path = tmp_aud.name
+                            try:
+                                audio_captions_map[i] = a_engine.caption_audio(tmp_aud_path, audio_prompt)
+                            except Exception as e: 
+                                print(f"Audio Cap Error: {e}")
+                                audio_captions_map[i] = ""
+                            finally: 
+                                if os.path.exists(tmp_aud_path): os.unlink(tmp_aud_path)
+                            prog_a.progress((i+1)/len(final_segments))
+                        full_audio_clip.close(); 
+                        # FREE VRAM: Audio Engine is done, clear it for Vision
+                        a_engine.clear() 
+                        clear_vram()
+                    except Exception as e:
+                        # Catch-all cleanup to prevent OOM on crash
+                        if 'a_engine' in locals(): a_engine.clear()
+                        clear_vram()
+                        raise e
                 else: st.error("Audio Engine Load Error.")
 
             # === PHASE 3: VISION & MERGE ===
@@ -418,9 +424,14 @@ elif app_mode == "📝 Bulk Video Captioner":
             start_ts = time.time()
             status_box = st.empty()
             videos = [f for f in os.listdir(v_dir) if f.lower().endswith((".mp4", ".mkv"))]
+            
+            if not videos:
+                st.error(f"No video files found in {v_dir}!")
+                st.stop()
+            
             transcriptions = {}
             
-            if not videos: st.warning("No videos found!")
+            if not videos: st.warning("No videos found!") # Redundant but kept for structure, inner block will skip
             else:
                 # 1. FAZA AUDIO (WHISPER)
                 if enable_speech:
