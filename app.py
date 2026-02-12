@@ -150,7 +150,9 @@ def load_vision_engine():
     # Check if model changed or loading config changed
     current_config = f"{str(SELECTED_MODEL)}_{n_ctx_val}_{n_gpu_layers_val}"
     
-    if 'vision_engine' not in st.session_state or st.session_state.get('last_model_config') != current_config:
+    if 'vision_engine' not in st.session_state or \
+       st.session_state.get('last_model_config') != current_config or \
+       (st.session_state['vision_engine'] and st.session_state['vision_engine'].engine is None):
         
         # Clear old
         if 'vision_engine' in st.session_state and st.session_state['vision_engine']:
