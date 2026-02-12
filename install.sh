@@ -6,7 +6,7 @@ set -e
 
 # UV Optimizations
 export UV_HTTP_TIMEOUT=3600
-export UV_LINK_MODE=hardlink
+export UV_LINK_MODE="${UV_LINK_MODE:-hardlink}"
 export UV_CACHE_DIR="${HOME}/.cache/uv"
 
 echo "======================================================================"
@@ -29,11 +29,40 @@ if ! command -v uv &> /dev/null; then
     export PATH="$PATH:$HOME/.cargo/bin:$HOME/.local/bin"
 fi
 
+# Argument parsing
+RESET_VENV=false
+USE_SYSTEM=false
+INSTALL_ARGS=""
+
+while [[ "$#" -gt 0 ]]; do
+    case $1 in
+        --reset) RESET_VENV=true ;;
+        --system) 
+            USE_SYSTEM=true 
+            INSTALL_ARGS="--system --break-system-packages"
+            ;;
+    esac
+    shift
+done
+
 echo "[STEP 1/3] Preparing Environment..."
-if [ ! -d ".venv" ]; then
-    uv venv .venv --python 3.10 --link-mode hardlink
+
+if [ "$USE_SYSTEM" = true ]; then
+    echo "[INFO] Using system Python environment (Skipping venv creation)..."
+    # We assume python3 is available in the base image
+else
+    if [ "$RESET_VENV" = true ]; then
+        if [ -d ".venv" ]; then
+            echo "[INFO] Resetting virtual environment as requested..."
+            rm -rf .venv
+        fi
+    fi
+
+    if [ ! -d ".venv" ]; then
+        uv venv .venv --python 3.10 --seed --managed-python --link-mode hardlink
+    fi
+    source .venv/bin/activate
 fi
-source .venv/bin/activate
 
 # Privacy Configuration (On-the-fly)
 if [ ! -f ".streamlit/config.toml" ]; then
@@ -44,24 +73,76 @@ if [ ! -f ".streamlit/config.toml" ]; then
 gatherUsageStats = false
 [server]
 headless = true
+maxUploadSize = 4096
 EOL
 fi
 
 echo "[STEP 2/3] Installing Torch Engine (CUDA 12.8)..."
-uv pip install \
-    --index-url https://download.pytorch.org/whl/cu128 \
-    --link-mode hardlink \
-    "torch==2.10.0+cu128" "torchvision==0.25.0+cu128" "torchaudio==2.10.0+cu128"
+# Skip Torch install if using system and it's likely present (Docker base image)
+if [ "$USE_SYSTEM" = true ] && python3 -c "import torch" &> /dev/null; then
+    echo "[INFO] System Torch detected. Skipping explicit Torch installation."
+else
+    uv pip install $INSTALL_ARGS \
+        --index-url https://download.pytorch.org/whl/cu128 \
+        --link-mode hardlink \
+        "torch==2.10.0+cu128" "torchvision==0.25.0+cu128" "torchaudio==2.10.0+cu128"
+fi
 
 echo "[STEP 3/3] Installing AI Stack..."
-uv pip install \
+uv pip install $INSTALL_ARGS \
     --link-mode hardlink \
     "git+https://github.com/m-bain/whisperX.git" --no-deps
 
-echo "[INFO] Syncing remaining dependencies from pyproject.toml..."
-uv pip install \
+echo "[INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)..."
+LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.23+cu128-cp310-cp310-linux_x86_64.whl"
+LINUX_WHEEL_SHA256="8d8546cd067a4cd9d86639519dd4833974cdc4603b28753c5195deef08f406cf"
+WHEEL_FILE="llama_cpp_python-0.3.23+cu128-cp310-cp310-linux_x86_64.whl"
+
+echo "[INFO] Downloading wheel for verification..."
+curl -L -o "$WHEEL_FILE" "$LINUX_WHEEL_URL"
+
+echo "[INFO] Verifying checksum..."
+echo "$LINUX_WHEEL_SHA256  $WHEEL_FILE" | sha256sum -c -
+
+if [ $? -ne 0 ]; then
+    echo "[ERROR] Checksum verification failed!"
+    rm "$WHEEL_FILE"
+    exit 1
+fi
+
+echo "[INFO] Checksum verified! Installing..."
+uv pip install $INSTALL_ARGS "$WHEEL_FILE" --force-reinstall
+rm "$WHEEL_FILE"
+
+
+# Fix for ROCm/Linux compatibility or just general stability matching Windows
+echo "[INFO] Ensuring correct CTranslate2 - Pinning <4.7.0..."
+uv pip install $INSTALL_ARGS "ctranslate2<4.7.0" --index-url https://pypi.org/simple --force-reinstall
+
+echo "[INFO] Syncing basic dependencies from pyproject.toml..."
+uv pip install $INSTALL_ARGS \
     --link-mode hardlink \
     -r pyproject.toml --extra-index-url https://download.pytorch.org/whl/cu128
+
+echo ""
+echo "[STEP 3.5] Installing Audio Intelligence Stack (Qwen2-Audio Support)..."
+echo "[INFO] Adding librosa, soundfile and updating transformers..."
+uv pip install $INSTALL_ARGS librosa soundfile numpy --link-mode hardlink
+uv pip install $INSTALL_ARGS --upgrade transformers accelerate huggingface_hub --link-mode hardlink
+
+
+echo ""
+# [Check] GPU Verification
+if [ "$SKIP_GPU_CHECK" != "true" ]; then
+    echo "[CHECK] Verifying GPU Acceleration (Llama CPP)..."
+    if [ "$USE_SYSTEM" = true ]; then
+        python3 -c "from llama_cpp import llama_supports_gpu_offload; print(f'>>> GPU Offload Supported: {llama_supports_gpu_offload()}')" || echo "WARNING: Llama check failed"
+    else
+        .venv/bin/python -c "from llama_cpp import llama_supports_gpu_offload; print(f'>>> GPU Offload Supported: {llama_supports_gpu_offload()}')" || echo "WARNING: Llama check failed"
+    fi
+else
+    echo "[INFO] Skipping GPU Verification (Build Mode)"
+fi
 
 echo "======================================================================"
 echo "Installation complete!"
