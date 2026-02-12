@@ -77,8 +77,24 @@ uv pip install \
 
 echo "[INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)..."
 LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.23+cu128-cp310-cp310-linux_x86_64.whl"
-echo "[INFO] Installing verified CUDA 12.8 wheel from release..."
-uv pip install "$LINUX_WHEEL_URL" --force-reinstall
+LINUX_WHEEL_SHA256="8d8546cd067a4cd9d86639519dd4833974cdc4603b28753c5195deef08f406cf"
+WHEEL_FILE="llama_cpp_python_cuda.whl"
+
+echo "[INFO] Downloading wheel for verification..."
+curl -L -o "$WHEEL_FILE" "$LINUX_WHEEL_URL"
+
+echo "[INFO] Verifying checksum..."
+echo "$LINUX_WHEEL_SHA256  $WHEEL_FILE" | sha256sum -c -
+
+if [ $? -ne 0 ]; then
+    echo "[ERROR] Checksum verification failed!"
+    rm "$WHEEL_FILE"
+    exit 1
+fi
+
+echo "[INFO] Checksum verified! Installing..."
+uv pip install "$WHEEL_FILE" --force-reinstall
+rm "$WHEEL_FILE"
 
 
 # Fix for ROCm/Linux compatibility or just general stability matching Windows

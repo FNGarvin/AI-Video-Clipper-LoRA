@@ -142,8 +142,29 @@ uv pip install ^
 
 echo [INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)...
 set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.23+cu128-cp310-cp310-win_amd64.whl"
-echo [INFO] Installing verified CUDA 12.8 wheel from release...
-uv pip install "%WIN_WHEEL_URL%" --force-reinstall
+set "WIN_WHEEL_SHA256=f25023777b5806925399b2e3c76c8bfae485e3cb0ab8b7d99c6a48e42894c37a"
+set "WHEEL_FILE=llama_cpp_python_cuda.whl"
+
+echo [INFO] Downloading wheel for verification...
+curl -L -o "%WHEEL_FILE%" "%WIN_WHEEL_URL%"
+if %errorlevel% neq 0 (
+    echo [ERROR] Download failed.
+    pause
+    exit /b 1
+)
+
+echo [INFO] Verifying checksum...
+certutil -hashfile "%WHEEL_FILE%" SHA256 | findstr /i "%WIN_WHEEL_SHA256%" >nul
+if %errorlevel% neq 0 (
+    echo [ERROR] Checksum verification failed!
+    del "%WHEEL_FILE%"
+    pause
+    exit /b 1
+)
+
+echo [SUCCESS] Checksum verified! Installing...
+uv pip install "%WHEEL_FILE%" --force-reinstall
+del "%WHEEL_FILE%"
 
 
 echo.
