@@ -94,9 +94,30 @@ uv pip install $INSTALL_ARGS \
     "git+https://github.com/m-bain/whisperX.git" --no-deps
 
 echo "[INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)..."
-LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.23+cu128-cp310-cp310-linux_x86_64.whl"
-LINUX_WHEEL_SHA256="8d8546cd067a4cd9d86639519dd4833974cdc4603b28753c5195deef08f406cf"
-WHEEL_FILE="llama_cpp_python-0.3.23+cu128-cp310-cp310-linux_x86_64.whl"
+
+# Detect Python Version
+if [ "$USE_SYSTEM" = true ]; then
+    PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+else
+    PY_VER=$(.venv/bin/python -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
+fi
+
+echo "[INFO] Detected Python Version: $PY_VER"
+
+if [ "$PY_VER" == "3.10" ]; then
+    LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.23+cu128-cp310-cp310-linux_x86_64.whl"
+    LINUX_WHEEL_SHA256="8d8546cd067a4cd9d86639519dd4833974cdc4603b28753c5195deef08f406cf"
+    WHEEL_FILE="llama_cpp_python-0.3.23+cu128-cp310-cp310-linux_x86_64.whl"
+elif [ "$PY_VER" == "3.12" ]; then
+    # Provided by FNGarvin for Runner
+    LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.24+cu128-cp312-cp312-linux_x86_64.whl"
+    LINUX_WHEEL_SHA256="d08a4bd4917091a1f6dda29c102ef9ab7286618405c13f7a233179ebc3389995"
+    WHEEL_FILE="llama_cpp_python-0.3.24+cu128-cp312-cp312-linux_x86_64.whl"
+else
+    echo "[ERROR] Unsupported Python Version for GPU Acceleration: $PY_VER. Only 3.10 and 3.12 supported."
+    # Fail hard to prevent broken installs
+    exit 1
+fi
 
 echo "[INFO] Downloading wheel for verification..."
 curl -L -o "$WHEEL_FILE" "$LINUX_WHEEL_URL"
@@ -127,7 +148,7 @@ uv pip install $INSTALL_ARGS \
 echo ""
 echo "[STEP 3.5] Installing Audio Intelligence Stack (Qwen2-Audio Support)..."
 echo "[INFO] Adding librosa, soundfile and updating transformers..."
-uv pip install $INSTALL_ARGS librosa soundfile numpy --link-mode hardlink
+uv pip install $INSTALL_ARGS librosa soundfile "numpy<2.4" --link-mode hardlink
 uv pip install $INSTALL_ARGS --upgrade transformers accelerate huggingface_hub --link-mode hardlink
 
 

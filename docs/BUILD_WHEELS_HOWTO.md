@@ -43,7 +43,7 @@ $env:CUDA_PATH = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8"
 $env:CMAKE_ARGS = "-DGGML_CUDA=on -DCMAKE_BUILD_TYPE=Release -D{CMAKE_BUILD_PARALLEL_LEVEL=4}"
 
 # Build the wheel from the JamePeng fork (or latest supported source)
-pip wheel git+[https://github.com/JamePeng/llama-cpp-python.git@main](https://github.com/JamePeng/llama-cpp-python.git@main) --no-deps --wheel-dir=wheels --no-cache-dir
+pip wheel git+https://github.com/JamePeng/llama-cpp-python.git@main --no-deps --wheel-dir=wheels --no-cache-dir
 
 # Rename the artifact to indicate CUDA support
 # Note: Ensure the filename matches the version generated in the \wheels folder
@@ -56,12 +56,8 @@ ren wheels\llama_cpp_python-0.3.16-cp310-cp310-win_amd64.whl llama_cpp_python-0.
 
 ### 1. Environment Preparation
 ```bash
-# Clone and enter directory
-git clone [https://github.com/cyberbol/AI-Video-Clipper-LoRA.git](https://github.com/cyberbol/AI-Video-Clipper-LoRA.git)
-cd AI-Video-Clipper-LoRA
-
-# Run installer and activate venv
-./install_linux.sh
+#use whatever version of python matches the current base image
+uv venv .venv --python 3.12 --seed --managed-python --link-mode hardlink
 source .venv/bin/activate
 ```
 
@@ -72,7 +68,7 @@ uv cache clean llama-cpp-python
 
 # Build using inline environment variables
 # IMPORTANT:Change these to suit!
-export PATH=/usr/local/cuda/bin:\$PATH
+export PATH=/usr/local/cuda/bin:$PATH
 export CUDACXX=/usr/local/cuda/bin/nvcc
 export FORCE_CMAKE=1
 export CUDA_PATH=/usr/local/cuda-12.8 
@@ -82,7 +78,7 @@ pip wheel git+https://github.com/JamePeng/llama-cpp-python.git@main --no-deps --
 
 # Rename the artifact
 # Note: Ensure the filename matches the version generated in the /wheels folder
-mv wheels/llama_cpp_python-0.3.16-cp310-cp310-linux_x86_64.whl wheels/llama_cpp_python-0.3.16+cu128-cp310-cp310-linux_x86_64.whl
+mv wheels/llama_cpp_python-0.3.16-cp312-cp312-linux_x86_64.whl wheels/llama_cpp_python-0.3.16+cu128-cp312-cp312-linux_x86_64.whl
 ```
 
 ---

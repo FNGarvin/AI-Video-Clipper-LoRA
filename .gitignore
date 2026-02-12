@@ -12,15 +12,22 @@ __pycache__/
 # Reason: These are large AI model weights (GBs in size) downloaded at runtime. 
 # They waste bandwidth and storage if committed to git.
 models
+models/
 
 # Wheels
 # Reason: This folder contains binary modules that can be quite large (eg, 
 # llama-cpp-python, which includes llama.cpp and the nvidia extensions)
 # we download them on the fly as appropriate instead of including in main repo
 wheels
+wheels/
 
 # Dataset Output (Wildcard to catch all variations)
 dataset*
+dataset*/
+dataset_*/
+
+
+>>>>>>> f9927da (native upload on docker instead of tk ui for batches)
 
 # Temporary Files
 tmp

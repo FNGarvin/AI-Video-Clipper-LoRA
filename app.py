@@ -23,9 +23,14 @@ import tempfile
 import torch
 import gc
 import time
-import tkinter as tk
-from tkinter import filedialog
+try:
+    import tkinter as tk
+    from tkinter import filedialog
+    HAS_TKINTER = True
+except ImportError:
+    HAS_TKINTER = False
 import logging
+import shutil
 
 # Suppress Streamlit's "missing ScriptRunContext" warning in threads
 logging.getLogger("streamlit.runtime.scriptrunner_utils.script_run_context").setLevel(logging.ERROR)
@@ -407,16 +412,22 @@ if app_mode == "🎥 Video Auto-Clipper":
 # MODE 2: BULK VIDEO CAPTIONER
 # =================================================================================================
 elif app_mode == "📝 Bulk Video Captioner":
-    if 'v_bulk_path' not in st.session_state: st.session_state['v_bulk_path'] = ""
-    col_v, col_vbtn = st.columns([3, 1])
-    with col_vbtn:
-        if st.button("📂 Select Folder"):
-            sel = select_folder_dialog()
-            if sel := select_folder_dialog():
-                st.session_state['v_bulk_path'] = sel
-                st.rerun()
-    with col_v: v_dir = st.text_input("Folder Path:", value=st.session_state['v_bulk_path'])
-    
+    if HAS_TKINTER:
+        # --- DESKTOP MODE (Folder Selection) ---
+        if 'v_bulk_path' not in st.session_state: st.session_state['v_bulk_path'] = ""
+        col_v, col_vbtn = st.columns([3, 1])
+        with col_vbtn:
+            if st.button("📂 Select Folder"):
+                sel = select_folder_dialog()
+                if sel: st.session_state['v_bulk_path'] = sel; st.rerun()
+        with col_v: v_dir = st.text_input("Folder Path:", value=st.session_state['v_bulk_path'])
+        uploaded_files = None
+    else:
+        # --- HEADLESS/DOCKER MODE (File Upload) ---
+        st.info("☁️ **Cloud Mode Detected**: Upload videos directly below.")
+        v_dir = None
+        uploaded_files = st.file_uploader("Upload Videos for Batch Processing", type=['mp4', 'mkv', 'mov'], accept_multiple_files=True)
+
     st.markdown("### 🛠️ Bulk Processing Options")
     col_opt1, col_opt2 = st.columns(2)
     with col_opt1:
@@ -424,45 +435,61 @@ elif app_mode == "📝 Bulk Video Captioner":
     with col_opt2:
         enable_speech = st.checkbox("✅ Enable Speech Transcription (WhisperX)", value=True)
 
-    if st.button("🚀 START BULK CAPTIONING") and os.path.exists(v_dir):
-        if not enable_vis and not enable_speech:
-            st.error("Select at least one option!")
-        else:
-            start_ts = time.time()
-            status_box = st.empty()
-            videos = [f for f in os.listdir(v_dir) if f.lower().endswith((".mp4", ".mkv"))]
-            
-            if not videos:
-                st.error(f"No video files found in {v_dir}!")
-                st.stop()
-            
-            transcriptions = {}
-            
-            if not videos: st.warning("No videos found!") # Redundant but kept for structure, inner block will skip
-            else:
-                # 1. FAZA AUDIO (WHISPER)
-                if enable_speech:
-                    status_box.info(f"🎤 **Phase 1: Transcribing Audio for {len(videos)} clips...**")
-                    try:
-                        # Ensure model
-                        wx_repo = "Systran/faster-whisper-large-v3"
-                        wx_path = os.path.normpath(os.path.join(MODELS_DIR, wx_repo))
-                        essential_wx = ["config.json", "model.bin", "tokenizer.json", "vocabulary.json", "preprocessor_config.json"]
-                        if not all(os.path.exists(os.path.join(wx_path, f)) for f in essential_wx):
-                             with st.spinner("Ensuring Whisper Model..."):
-                                 wx_path = download_model(wx_repo, MODELS_DIR, specific_files=essential_wx)
+    # Trigger Logic
+    start_processing = False
+    if HAS_TKINTER:
+        if st.button("🚀 START BULK CAPTIONING") and v_dir and os.path.exists(v_dir):
+            start_processing = True
+    else:
+        if uploaded_files and st.button("🚀 PROCESS UPLOADED VIDEOS"):
+            start_processing = True
 
-                        model_w = whisperx.load_model(wx_path, device, compute_type="float16")
-                        prog_a = st.progress(0)
-                        for i, v_name in enumerate(videos):
-                            full_p = os.path.join(v_dir, v_name)
-                            audio = whisperx.load_audio(full_p)
-                            result = model_w.transcribe(audio, batch_size=16)
-                            full_text = " ".join([seg['text'].strip() for seg in result['segments']])
-                            transcriptions[v_name] = full_text
-                            prog_a.progress((i+1)/len(videos))
-                        del model_w, audio; clear_vram()
-                    except Exception as e: st.error(f"Whisper Error: {e}"); clear_vram()
+    if start_processing:
+        # Setup Temp Dir for Uploads (if applicable)
+        temp_upload_dir = None
+        if not HAS_TKINTER and uploaded_files:
+            temp_upload_dir = tempfile.mkdtemp(prefix="bulk_upload_")
+            v_dir = temp_upload_dir
+            st.info(f"📦 Staging {len(uploaded_files)} files...")
+            for uf in uploaded_files:
+                with open(os.path.join(temp_upload_dir, uf.name), "wb") as f:
+                    f.write(uf.getbuffer())
+        
+        try:
+            if not enable_vis and not enable_speech:
+                st.error("Select at least one option!")
+            else:
+                start_ts = time.time()
+                status_box = st.empty()
+                videos = [f for f in os.listdir(v_dir) if f.lower().endswith((".mp4", ".mkv", ".mov"))]
+                transcriptions = {}
+                
+                if not videos: st.warning("No videos found!")
+                else:
+                    # 1. FAZA AUDIO (WHISPER)
+                    if enable_speech:
+                        status_box.info(f"🎤 **Phase 1: Transcribing Audio for {len(videos)} clips...**")
+                        try:
+                            # Ensure model
+                            wx_repo = "Systran/faster-whisper-large-v3"
+
+                            wx_path = os.path.normpath(os.path.join(MODELS_DIR, wx_repo))
+                            essential_wx = ["config.json", "model.bin", "tokenizer.json", "vocabulary.json", "preprocessor_config.json"]
+                            if not all(os.path.exists(os.path.join(wx_path, f)) for f in essential_wx):
+                                 with st.spinner("Ensuring Whisper Model..."):
+                                     wx_path = download_model(wx_repo, MODELS_DIR, specific_files=essential_wx)
+
+                            model_w = whisperx.load_model(wx_path, device, compute_type="float16")
+                            prog_a = st.progress(0)
+                            for i, v_name in enumerate(videos):
+                                full_p = os.path.join(v_dir, v_name)
+                                audio = whisperx.load_audio(full_p)
+                                result = model_w.transcribe(audio, batch_size=16)
+                                full_text = " ".join([seg['text'].strip() for seg in result['segments']])
+                                transcriptions[v_name] = full_text
+                                prog_a.progress((i+1)/len(videos))
+                            del model_w, audio; clear_vram()
+                        except Exception as e: st.error(f"Whisper Error: {e}"); clear_vram()
                 
                 # 2. FAZA VISION & MERGE
                 if enable_vis:
@@ -494,8 +521,28 @@ elif app_mode == "📝 Bulk Video Captioner":
                     
                     with open(os.path.splitext(p)[0] + ".txt", "w", encoding="utf-8") as f: 
                         f.write(final_txt.strip())
+                        
+                    # IF HEADLESS: Provide Download Button for Result TXT immediately (since files are ephemeral)
+                    if not HAS_TKINTER:
+                        with open(os.path.splitext(p)[0] + ".txt", "r", encoding="utf-8") as f:
+                            st.download_button(f"⬇️ Download Caption ({v_name})", f.read(), file_name=f"{v_name}.txt")
                     
                     prog_main.progress((i+1)/len(videos))
+
+                st.success("✅ Bulk Processing Complete!")
+                
+                # IF HEADLESS: Zip Everything for easy download
+                if not HAS_TKINTER and temp_upload_dir:
+                     import shutil
+                     zip_path = shutil.make_archive(os.path.join(tempfile.gettempdir(), "captions_batch"), 'zip', temp_upload_dir)
+                     with open(zip_path, "rb") as f:
+                         st.download_button("📦 DOWNLOAD ALL CAPTIONS (ZIP)", f, file_name="captions_batch.zip")
+
+        finally:
+            # Cleanup Temp Uploads
+            if temp_upload_dir and os.path.exists(temp_upload_dir):
+                import shutil
+                shutil.rmtree(temp_upload_dir)
                 
                 if enable_vis:
                     # Should we clear? Not strictly necessary if we want to keep it warm, but safer for VRAM
@@ -548,6 +595,10 @@ else:
         st.success("✅ DONE! Folder finished.")
         mins, secs = divmod(time.time() - start_ts, 60)
         st.info(f"⏱️ Total Execution Time: {int(mins)}m {int(secs)}s")
+
+st.markdown("---")
+st.markdown("<div style='text-align: center'><a href='https://github.com/cyberbol/AI-Video-Clipper-LoRA'>An Open Source Project</a></div>", unsafe_allow_html=True)
+
 
 st.markdown("---")
 st.markdown("<div style='text-align: center'><a href='https://github.com/cyberbol/AI-Video-Clipper-LoRA'>An Open Source Project</a></div>", unsafe_allow_html=True)
