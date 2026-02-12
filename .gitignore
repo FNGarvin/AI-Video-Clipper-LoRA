@@ -6,24 +6,24 @@ __pycache__/
 # Virtual Environment
 # Reason: This folder contains the local Python installation and libraries managed by 'uv'. 
 # It is specific to your machine's OS and architecture.
-.venv/
+.venv
 
 # Large Model Files
 # Reason: These are large AI model weights (GBs in size) downloaded at runtime. 
 # They waste bandwidth and storage if committed to git.
-models/
+models
 
 # Wheels
 # Reason: This folder contains binary modules that can be quite large (eg, 
 # llama-cpp-python, which includes llama.cpp and the nvidia extensions)
 # we download them on the fly as appropriate instead of including in main repo
-wheels/
+wheels
 
 # Dataset Output (Wildcard to catch all variations)
-dataset*/
+dataset*
 
 # Temporary Files
-tmp/
+tmp
 
 # Media Files (Input/Output)
 # Reason: Avoid committing large video files.
