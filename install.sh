@@ -5,9 +5,9 @@
 set -e
 
 # UV Optimizations
-export UV_HTTP_TIMEOUT=3600
+export UV_HTTP_TIMEOUT=${UV_HTTP_TIMEOUT:-3600}
 export UV_LINK_MODE="${UV_LINK_MODE:-hardlink}"
-export UV_CACHE_DIR="${HOME}/.cache/uv"
+export UV_CACHE_DIR="${UV_CACHE_DIR:-${HOME}/.cache/uv}"
 
 echo "======================================================================"
 echo "         AI VIDEO CLIPPER & LORA CAPTIONER - INSTALLER (Linux/WSL)"
@@ -91,7 +91,7 @@ fi
 echo "[STEP 3/3] Installing AI Stack..."
 uv pip install $INSTALL_ARGS \
     --link-mode hardlink \
-    "git+https://github.com/m-bain/whisperX.git" --no-deps
+    "git+https://github.com/m-bain/whisperX.git@6ec4a020489d904c4f2cd1ed097674232d2692d4" --no-deps
 
 echo "[INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)..."
 
@@ -148,14 +148,31 @@ uv pip install $INSTALL_ARGS \
 echo ""
 echo "[STEP 3.5] Installing Audio Intelligence Stack (Qwen2-Audio Support)..."
 echo "[INFO] Adding librosa, soundfile and updating transformers..."
-uv pip install $INSTALL_ARGS librosa soundfile "numpy<2.4" --link-mode hardlink
+uv pip install $INSTALL_ARGS librosa soundfile --link-mode hardlink
 uv pip install $INSTALL_ARGS --upgrade transformers accelerate huggingface_hub --link-mode hardlink
 
 
 echo ""
-# [Check] GPU Verification
 if [ "$SKIP_GPU_CHECK" != "true" ]; then
     echo "[CHECK] Verifying GPU Acceleration (Llama CPP)..."
+    
+    # Inject local CUDA library paths for host-side verification if using nvidia pip packages
+    # We find all /lib directories under the 'nvidia' package folder in the active environment
+    if [ "$USE_SYSTEM" = true ]; then
+        SITE_PACKAGES=$(python3 -m site --user-site 2>/dev/null)
+        [ -z "$SITE_PACKAGES" ] && SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])" 2>/dev/null)
+    else
+        SITE_PACKAGES=$(.venv/bin/python -c "import site; print(site.getsitepackages()[0])" 2>/dev/null)
+    fi
+
+    if [ -d "$SITE_PACKAGES/nvidia" ]; then
+        # Find all directories named 'lib' under nvidia/ and join them into a path string
+        LIB_PATHS=$(find "$SITE_PACKAGES/nvidia" -type d -name "lib" 2>/dev/null | paste -sd ":" - || echo "")
+        if [ -n "$LIB_PATHS" ]; then
+            export LD_LIBRARY_PATH="$LIB_PATHS:$LD_LIBRARY_PATH"
+        fi
+    fi
+
     if [ "$USE_SYSTEM" = true ]; then
         python3 -c "from llama_cpp import llama_supports_gpu_offload; print(f'>>> GPU Offload Supported: {llama_supports_gpu_offload()}')" || echo "WARNING: Llama check failed"
     else

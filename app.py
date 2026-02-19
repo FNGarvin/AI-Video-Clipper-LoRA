@@ -558,43 +558,86 @@ elif app_mode == "📝 Bulk Video Captioner":
 # MODE 3: IMAGE FOLDER CAPTIONER
 # =================================================================================================
 else: 
-    if 'img_path' not in st.session_state: st.session_state['img_path'] = ""
-    col_p, col_b = st.columns([3, 1])
-    with col_b:
-        if st.button("📂 Select Folder"):
-            if sel := select_folder_dialog():
-                st.session_state['img_path'] = sel
-                st.rerun()
-    with col_p: img_dir = st.text_input("Path:", value=st.session_state['img_path'])
-    
-    if st.button("🚀 CAPTION FOLDER") and os.path.exists(img_dir):
+    if HAS_TKINTER:
+        if 'img_path' not in st.session_state: st.session_state['img_path'] = ""
+        col_p, col_b = st.columns([3, 1])
+        with col_b:
+            if st.button("📂 Select Folder"):
+                if sel := select_folder_dialog():
+                    st.session_state['img_path'] = sel
+                    st.rerun()
+        with col_p: img_dir = st.text_input("Path:", value=st.session_state['img_path'])
+        uploaded_images = None
+    else:
+        st.info("☁️ **Cloud Mode Detected**: Upload images directly below.")
+        img_dir = None
+        uploaded_images = st.file_uploader("Upload Images for Batch Captioning", type=["png", "jpg", "jpeg", "webp"], accept_multiple_files=True)
+
+    # Trigger Logic
+    start_img_processing = False
+    if HAS_TKINTER:
+        if st.button("🚀 CAPTION FOLDER") and img_dir and os.path.exists(img_dir):
+            start_img_processing = True
+    else:
+        if uploaded_images and st.button("🚀 PROCESS UPLOADED IMAGES"):
+            start_img_processing = True
+
+    if start_img_processing:
         start_ts = time.time()
-        v_engine = load_vision_engine()
-        imgs = [f for f in os.listdir(img_dir) if f.lower().endswith((".png", ".jpg", ".webp"))]
+        temp_img_dir = None
         
-        if not imgs:
-            st.warning("No images found!")
-            st.stop()
-        
-        prog = st.progress(0)
-        for i, name in enumerate(imgs):
-            p = os.path.join(img_dir, name)
+        try:
+            if not HAS_TKINTER and uploaded_images:
+                temp_img_dir = tempfile.mkdtemp()
+                img_dir = temp_img_dir
+                for uploaded_file in uploaded_images:
+                    with open(os.path.join(temp_img_dir, uploaded_file.name), "wb") as f:
+                        f.write(uploaded_file.getbuffer())
+
+            v_engine = load_vision_engine()
+            imgs = [f for f in os.listdir(img_dir) if f.lower().endswith((".png", ".jpg", ".jpeg", ".webp"))]
             
-            stream_box = st.empty()
-            def on_token(text):
-                stream_box.markdown(f"**{name}:** {text}")
+            if not imgs:
+                st.warning("No images found!")
+                st.stop()
+            
+            prog = st.progress(0)
+            for i, name in enumerate(imgs):
+                p = os.path.join(img_dir, name)
                 
-            cap = v_engine.caption(p, "image", lora_trigger, user_instruction, 
-                                   gen_config=GEN_CONFIG, stream_callback=on_token)
-            stream_box.empty()
+                stream_box = st.empty()
+                def on_token(text):
+                    stream_box.markdown(f"**{name}:** {text}")
+                    
+                cap = v_engine.caption(p, "image", lora_trigger, user_instruction, 
+                                       gen_config=GEN_CONFIG, stream_callback=on_token)
+                stream_box.empty()
+                
+                txt_path = os.path.splitext(p)[0] + ".txt"
+                with open(txt_path, "w", encoding="utf-8") as f: 
+                    f.write(cap)
+                
+                # IF HEADLESS: Provide Download Button
+                if not HAS_TKINTER:
+                    st.image(p, width=200)
+                    st.download_button(f"⬇️ Download Caption ({name})", cap, file_name=os.path.basename(txt_path))
+                
+                prog.progress((i+1)/len(imgs))
+                
+            st.success("✅ DONE! Folder finished.")
             
-            with open(os.path.splitext(p)[0] + ".txt", "w", encoding="utf-8") as f: 
-                f.write(cap)
-            prog.progress((i+1)/len(imgs))
+            # IF HEADLESS: Zip Everything
+            if not HAS_TKINTER and temp_img_dir:
+                 zip_path = shutil.make_archive(os.path.join(tempfile.gettempdir(), "image_captions_batch"), 'zip', temp_img_dir)
+                 with open(zip_path, "rb") as f:
+                     st.download_button("📦 DOWNLOAD ALL IMAGE CAPTIONS (ZIP)", f, file_name="image_captions_batch.zip")
             
-        st.success("✅ DONE! Folder finished.")
-        mins, secs = divmod(time.time() - start_ts, 60)
-        st.info(f"⏱️ Total Execution Time: {int(mins)}m {int(secs)}s")
+            mins, secs = divmod(time.time() - start_ts, 60)
+            st.info(f"⏱️ Total Execution Time: {int(mins)}m {int(secs)}s")
+
+        finally:
+            if temp_img_dir and os.path.exists(temp_img_dir):
+                shutil.rmtree(temp_img_dir)
 
 st.markdown("---")
 st.markdown("<div style='text-align: center'><a href='https://github.com/cyberbol/AI-Video-Clipper-LoRA'>An Open Source Project</a></div>", unsafe_allow_html=True)

@@ -21,13 +21,11 @@ models/
 wheels
 wheels/
 
+
 # Dataset Output (Wildcard to catch all variations)
 dataset*
 dataset*/
 dataset_*/
-
-
->>>>>>> f9927da (native upload on docker instead of tk ui for batches)
 
 # Temporary Files
 tmp
@@ -47,3 +45,6 @@ tmp
 
 # Personal Project Notes
 notes/
+
+# Infrastructure
+.env

@@ -169,7 +169,7 @@ del "%WHEEL_FILE%"
 
 echo.
 echo [STEP 3/3] Installing AI Stack...
-uv pip install "git+https://github.com/m-bain/whisperX.git" --no-deps --link-mode hardlink
+uv pip install "git+https://github.com/m-bain/whisperX.git@6ec4a020489d904c4f2cd1ed097674232d2692d4" --no-deps --link-mode hardlink
 
 echo [INFO] Ensuring correct CTranslate2 (Windows) - Pinning <4.7.0 to avoid ROCm bug...
 uv pip install "ctranslate2<4.7.0" --index-url https://pypi.org/simple --force-reinstall

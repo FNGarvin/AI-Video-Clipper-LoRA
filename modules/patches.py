@@ -43,3 +43,9 @@ def apply_patches():
             return "soundfile"
         torchaudio.get_audio_backend = get_audio_backend
 
+    # 6. Restore set_audio_backend (Removed in 2.2+, used by pyannote < 4.0)
+    if not hasattr(torchaudio, "set_audio_backend"):
+        def set_audio_backend(backend):
+            pass # No-op in newer torchaudio
+        torchaudio.set_audio_backend = set_audio_backend
+

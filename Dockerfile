@@ -10,8 +10,16 @@ ENV UV_LINK_MODE=hardlink
 ENV UV_CACHE_DIR="/root/.cache/uv"
 ENV PATH="/root/.local/bin:$PATH"
 
-# Install system dependencies
-RUN apt-get update && apt-get install -y \
+# Optional Apt Proxy setup
+ARG APT_PROXY
+RUN if [ -n "$APT_PROXY" ]; then \
+    echo "Acquire::http::Proxy \"$APT_PROXY\";" > /etc/apt/apt.conf.d/01proxy; \
+    fi
+
+# Install system dependencies (Uses native Podman/Buildah cache mounts for CI/CD)
+RUN --mount=type=cache,target=/var/cache/apt,sharing=locked \
+    --mount=type=cache,target=/var/lib/apt,sharing=locked \
+    apt-get update && apt-get install -y \
     ffmpeg \
     git \
     curl \
