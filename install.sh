@@ -156,8 +156,10 @@ echo ""
 if [ "$SKIP_GPU_CHECK" != "true" ]; then
     echo "[CHECK] Verifying GPU Acceleration (Llama CPP)..."
     
-    # Inject local CUDA library paths for host-side verification if using nvidia pip packages
-    # We find all /lib directories under the 'nvidia' package folder in the active environment
+    # Set LD_LIBRARY_PATH to include NVIDIA libraries for wheel compatibility checks
+export LD_LIBRARY_PATH=/usr/local/lib/python3.12/dist-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.12/dist-packages/nvidia/cublas/lib:/usr/local/lib/python3.12/dist-packages/nvidia/cuda_nvrtc/lib:/usr/local/lib/python3.12/dist-packages/nvidia/cudnn/lib:$LD_LIBRARY_PATH
+
+# Logic to pick the correct wheel based on OS and Python version
     if [ "$USE_SYSTEM" = true ]; then
         SITE_PACKAGES=$(python3 -m site --user-site 2>/dev/null)
         [ -z "$SITE_PACKAGES" ] && SITE_PACKAGES=$(python3 -c "import site; print(site.getsitepackages()[0])" 2>/dev/null)
