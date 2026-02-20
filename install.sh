@@ -110,9 +110,9 @@ if [ "$PY_VER" == "3.10" ]; then
     WHEEL_FILE="llama_cpp_python-0.3.23+cu128-cp310-cp310-linux_x86_64.whl"
 elif [ "$PY_VER" == "3.12" ]; then
     # Provided by FNGarvin for Runner - AVX2 Universal Build
-    LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26-cu128-cp312-cp312-linux_x86_64.whl"
+    LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128-cp312-cp312-linux_x86_64.whl"
     LINUX_WHEEL_SHA256="e32b9b039b25c3529c33572df177c7e4b5295547027b9a63174684de04cdc1f0"
-    WHEEL_FILE="llama_cpp_python-0.3.26-cu128-cp312-cp312-linux_x86_64.whl"
+    WHEEL_FILE="llama_cpp_python-0.3.26+cu128-cp312-cp312-linux_x86_64.whl"
 else
     echo "[ERROR] Unsupported Python Version for GPU Acceleration: $PY_VER. Only 3.10 and 3.12 supported."
     # Fail hard to prevent broken installs
