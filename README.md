@@ -37,7 +37,7 @@ Standard mode for captioning datasets of images using powerful, vision-capable L
 * **Windows 10/11** or **Linux**
 
 ### 🪟 Windows (One-Click)
-1.  Run `install.bat`.
+1.  Run `Install.bat`.
     * *This script uses `uv` to create an isolated, conflict-free environment and installs all dependencies including FFmpeg and Flash Attention.*
 2.  Run `Run.bat` to start the app.
 
