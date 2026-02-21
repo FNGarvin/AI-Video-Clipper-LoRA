@@ -20,7 +20,8 @@ done
 # Set up local model paths
 export HF_HOME="./models"
 export TORCH_HOME="./models"
-export LD_LIBRARY_PATH=/usr/local/lib/python3.12/dist-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.12/dist-packages/nvidia/cublas/lib:/usr/local/lib/python3.12/dist-packages/nvidia/cuda_nvrtc/lib:/usr/local/lib/python3.12/dist-packages/nvidia/cudnn/lib:$LD_LIBRARY_PATH
+export NVIDIA_LIBS=$(python3 -c 'import site, os, glob; paths = [glob.glob(os.path.join(p, "nvidia/*/lib")) for p in site.getsitepackages()]; print(":".join([p for sub in paths for p in sub]))' 2>/dev/null)
+export LD_LIBRARY_PATH=$NVIDIA_LIBS:$LD_LIBRARY_PATH
 export KMP_DUPLICATE_LIB_OK=TRUE
 
 # Activate environment

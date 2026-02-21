@@ -171,13 +171,13 @@ if "%IS_MODERN_GPU%"=="false" (
 )
 
 if "%IS_MODERN_GPU%"=="true" (
-    set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_noavx512_Blackwell-cp310-cp310-win_amd64.whl"
+    set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_Blackwell-cp310-cp310-win_amd64.whl"
     set "WIN_WHEEL_SHA256=6c13577479d21d51832b2b0f5a75dc64a76ed40ed3f97c9e46bdcf666e286b69"
-    set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128_noavx512_Blackwell-cp310-cp310-win_amd64.whl"
+    set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128_Blackwell-cp310-cp310-win_amd64.whl"
 ) else (
-    set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_noavx512-cp310-cp310-win_amd64.whl"
+    set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128-cp310-cp310-win_amd64.whl"
     set "WIN_WHEEL_SHA256=d199417da48fb5158390920aa100a0fac4a5c5139059a3e843dad6a7a6461977"
-    set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128_noavx512-cp310-cp310-win_amd64.whl"
+    set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128-cp310-cp310-win_amd64.whl"
 )
 
 echo [INFO] Downloading wheel for verification...

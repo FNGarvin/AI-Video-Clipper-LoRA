@@ -123,19 +123,19 @@ fi
 
 if [ "$PY_VER" == "3.10" ]; then
     if [ "$IS_MODERN_GPU" = true ]; then
-        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_noavx512_Blackwell-cp310-cp310-linux_x86_64.whl"
-        LINUX_WHEEL_SHA256="58d92a5bba695b77699d5c72857fefd67629ae46f37949b9836ca240663409fc"
-        WHEEL_FILE="llama_cpp_python-0.3.26+cu128_noavx512_Blackwell-cp310-cp310-linux_x86_64.whl"
+        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_Blackwell-cp310-cp310-linux_x86_64.whl"
+        LINUX_WHEEL_SHA256="23d611360d950d4f60f204c43a673b8468b7720b97f44746c1ab106b0d85f7a2"
+        WHEEL_FILE="llama_cpp_python-0.3.26+cu128_Blackwell-cp310-cp310-linux_x86_64.whl"
     else
-        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_noavx512-cp310-cp310-linux_x86_64.whl"
-        LINUX_WHEEL_SHA256="1b9991085e6ed222f75ca15eace30e77b73122080116a21f99c9ce5d95d85c35"
-        WHEEL_FILE="llama_cpp_python-0.3.26+cu128_noavx512-cp310-cp310-linux_x86_64.whl"
+        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128-cp310-cp310-linux_x86_64.whl"
+        LINUX_WHEEL_SHA256="2b62db61d1b2e1b2066fbb99e35d0604fe4930fd1bbfbe1ef86d6cb145ee4bae"
+        WHEEL_FILE="llama_cpp_python-0.3.26+cu128-cp310-cp310-linux_x86_64.whl"
     fi
 elif [ "$PY_VER" == "3.12" ]; then
     # Provided by FNGarvin for Runner - AVX2 Universal Build
-    LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_noavx512-cp312-cp312-linux_x86_64.whl"
-    LINUX_WHEEL_SHA256="9b74c2fef0ebad22164107718080621cdab9a8227641b354869b61eeaf14812d"
-    WHEEL_FILE="llama_cpp_python-0.3.26+cu128_noavx512-cp312-cp312-linux_x86_64.whl"
+    LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128-cp312-cp312-linux_x86_64.whl"
+    LINUX_WHEEL_SHA256="b3b7037ff784278f0c4c868c7ff28fdbb22dc9dfe6f91b7e79f530025ad037e2"
+    WHEEL_FILE="llama_cpp_python-0.3.26+cu128-cp312-cp312-linux_x86_64.whl"
 else
     echo "[ERROR] Unsupported Python Version for GPU Acceleration: $PY_VER. Only 3.10 and 3.12 supported."
     # Fail hard to prevent broken installs
@@ -179,8 +179,7 @@ echo ""
 if [ "$SKIP_GPU_CHECK" != "true" ]; then
     echo "[CHECK] Verifying GPU Acceleration (Llama CPP)..."
     
-    # Set LD_LIBRARY_PATH to include NVIDIA libraries for wheel compatibility checks
-export LD_LIBRARY_PATH=/usr/local/lib/python3.12/dist-packages/nvidia/cuda_runtime/lib:/usr/local/lib/python3.12/dist-packages/nvidia/cublas/lib:/usr/local/lib/python3.12/dist-packages/nvidia/cuda_nvrtc/lib:/usr/local/lib/python3.12/dist-packages/nvidia/cudnn/lib:$LD_LIBRARY_PATH
+    # We rely on the dynamic detector below for the exact nvidia lib path
 
 # Logic to pick the correct wheel based on OS and Python version
     if [ "$USE_SYSTEM" = true ]; then
