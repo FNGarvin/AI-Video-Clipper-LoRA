@@ -9,6 +9,10 @@ __pycache__/
 models
 models/
 
+#wheels
+wheel/
+wheels/
+
 # Dataset Output
 dataset/
 dataset_*/

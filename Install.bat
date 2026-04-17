@@ -19,7 +19,7 @@ echo.
 uv --version >nul 2>&1
 if %errorlevel% neq 0 (
     echo [INFO] uv not found. Installing via winget...
-    winget install astral-sh.uv --accept-source-agreements --accept-package-agreements
+    call winget install --id astral-sh.uv --source winget --accept-source-agreements --accept-package-agreements
     
     REM SEARCH STRATEGY:
     REM 1. Standard Winget Links (Symlinks)
@@ -87,7 +87,7 @@ where ffmpeg >nul 2>&1
 if %errorlevel% neq 0 (
     echo.
     echo [INFO] FFmpeg not found. Installing via winget...
-    winget install Gyan.FFmpeg --accept-source-agreements --accept-package-agreements
+    call winget install Gyan.FFmpeg --source winget --accept-source-agreements --accept-package-agreements
     
     REM ATTEMPT DYNAMIC PATH REFRESH
     REM 1. Standard Winget Links (Symlinks)
@@ -135,7 +135,7 @@ if not exist ".streamlit\config.toml" (
 echo .
 echo [STEP 2/3] Installing Torch Engine (CUDA 12.8)...
 call .venv\Scripts\activate.bat
-uv pip install ^
+call uv pip install ^
     --index-url https://download.pytorch.org/whl/cu128 ^
     --link-mode hardlink ^
     "torch==2.10.0+cu128" "torchvision==0.25.0+cu128" "torchaudio==2.10.0+cu128"
@@ -198,16 +198,16 @@ if %errorlevel% neq 0 (
 )
 
 echo [SUCCESS] Checksum verified! Installing...
-uv pip install "%WHEEL_FILE%" --force-reinstall
+call uv pip install "%WHEEL_FILE%" --force-reinstall
 del "%WHEEL_FILE%"
 
 
 echo.
 echo [STEP 3/3] Installing AI Stack...
-uv pip install "git+https://github.com/m-bain/whisperX.git@6ec4a020489d904c4f2cd1ed097674232d2692d4" --no-deps --link-mode hardlink
+call uv pip install "git+https://github.com/m-bain/whisperX.git@6ec4a020489d904c4f2cd1ed097674232d2692d4" --no-deps --link-mode hardlink
 
 echo [INFO] Ensuring correct CTranslate2 (Windows) - Pinning <4.7.0 to avoid ROCm bug...
-uv pip install "ctranslate2<4.7.0" --index-url https://pypi.org/simple --force-reinstall
+call uv pip install "ctranslate2<4.7.0" --index-url https://pypi.org/simple --force-reinstall
 
 echo [INFO] Syncing remaining dependencies from pyproject.toml...
 uv pip install -r pyproject.toml --extra-index-url https://download.pytorch.org/whl/cu128 --link-mode hardlink
@@ -216,8 +216,8 @@ uv pip install -r pyproject.toml --extra-index-url https://download.pytorch.org/
 echo.
 echo [STEP 3.5] Installing Audio Intelligence Stack (Qwen2-Audio Support)...
 echo [INFO] Adding librosa, soundfile and updating transformers...
-uv pip install librosa soundfile numpy --link-mode hardlink
-uv pip install --upgrade transformers accelerate huggingface_hub --link-mode hardlink
+call uv pip install librosa soundfile numpy --link-mode hardlink
+call uv pip install transformers accelerate huggingface_hub --link-mode hardlink
 :: ------------------------
 
 echo.
