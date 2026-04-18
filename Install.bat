@@ -171,19 +171,29 @@ if "%IS_MODERN_GPU%"=="false" (
 )
 
 if "%IS_MODERN_GPU%"=="true" (
-    set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_Blackwell-cp310-cp310-win_amd64.whl"
-    set "WIN_WHEEL_SHA256=6c13577479d21d51832b2b0f5a75dc64a76ed40ed3f97c9e46bdcf666e286b69"
-    set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128_Blackwell-cp310-cp310-win_amd64.whl"
+    REM set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.36+cu128_Blackwell-cp310-cp310-win_amd64.whl"
+    set "WIN_WHEEL_URL=wheels\llama_cpp_python-0.3.36+cu128_Blackwell-cp310-cp310-win_amd64.whl"
+    set "WIN_WHEEL_SHA256=dcd2a470b65d14ebb5a9edac443c92c6e7ca8b4e98de1278817e2b06acfb5335"
+    set "WHEEL_FILE=llama_cpp_python-0.3.36+cu128_Blackwell-cp310-cp310-win_amd64.whl"
 ) else (
-    set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128-cp310-cp310-win_amd64.whl"
-    set "WIN_WHEEL_SHA256=d199417da48fb5158390920aa100a0fac4a5c5139059a3e843dad6a7a6461977"
-    set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128-cp310-cp310-win_amd64.whl"
+    REM set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.36+cu128-cp310-cp310-win_amd64.whl"
+    set "WIN_WHEEL_URL=wheels\llama_cpp_python-0.3.36+cu128-cp310-cp310-win_amd64.whl"
+    set "WIN_WHEEL_SHA256=b7404f129162284a8967ef2a6a1b7a37336dc69efc7b1e9c7768b7c5a0c3eda2"
+    set "WHEEL_FILE=llama_cpp_python-0.3.36+cu128-cp310-cp310-win_amd64.whl"
 )
 
-echo [INFO] Downloading wheel for verification...
-curl -L -o "%WHEEL_FILE%" "%WIN_WHEEL_URL%"
+REM echo [INFO] Downloading wheel for verification...
+REM curl -L -o "%WHEEL_FILE%" "%WIN_WHEEL_URL%"
+REM if %errorlevel% neq 0 (
+REM     echo [ERROR] Download failed.
+REM     pause
+REM     exit /b 1
+REM )
+
+echo [INFO] Copying local wheel for verification...
+copy "%WIN_WHEEL_URL%" "%WHEEL_FILE%"
 if %errorlevel% neq 0 (
-    echo [ERROR] Download failed.
+    echo [ERROR] Copy failed.
     pause
     exit /b 1
 )

@@ -54,7 +54,7 @@ $env:CXXFLAGS = "/MP"
 $env:CMAKE_BUILD_PARALLEL_LEVEL = "16"
 
 # Compiler Args - Disable AVX512 for broad compatibility unless you have a modern workstation CPU
-$env:CMAKE_ARGS = "-DGGML_CUDA=on -DCMAKE_BUILD_TYPE=Release -DLLAMA_AVX512=OFF"
+$env:CMAKE_ARGS = "-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=86;89 -DCMAKE_BUILD_TYPE=Release -DLLAMA_AVX512=OFF"
 
 # Build the wheel from the JamePeng fork (or latest supported source)
 pip wheel git+https://github.com/JamePeng/llama-cpp-python.git@main --no-deps --wheel-dir=wheels --no-cache-dir
@@ -62,6 +62,8 @@ pip wheel git+https://github.com/JamePeng/llama-cpp-python.git@main --no-deps --
 # Rename the artifact to indicate CUDA support
 # Note: Ensure the filename matches the version generated in the \wheels folder
 ren wheels\llama_cpp_python-0.3.16-cp310-cp310-win_amd64.whl llama_cpp_python-0.3.16+cu128-cp310-cp310-win_amd64.whl
+
+#THEN, do it all again w/ -DCMAKE_CUDA_ARCHITECTURES=100;120;120-virtual for Blackwell, Hopper, +ptx and name the new wheel appropriately
 ```
 
 ---
@@ -87,13 +89,16 @@ export PATH=/usr/local/cuda/bin:$PATH
 export CUDACXX=/usr/local/cuda/bin/nvcc
 export FORCE_CMAKE=1
 export CUDA_PATH=/usr/local/cuda
-export CMAKE_ARGS="-DGGML_CUDA=ON -DLLAMA_AVX512=OFF -DCMAKE_CUDA_ARCHITECTURES=all -DCMAKE_BUILD_TYPE=Release"
+export CMAKE_ARGS='-DGGML_CUDA=ON -DLLAMA_AVX512=OFF -DCMAKE_CUDA_ARCHITECTURES=86;89 -DCMAKE_BUILD_TYPE=Release'
 export CMAKE_BUILD_PARALLEL_LEVEL=8 
 pip wheel git+https://github.com/JamePeng/llama-cpp-python.git --no-deps --wheel-dir=wheels --no-cache-dir
 
 # Rename the artifact to indicate the Universal/AVX2 status
 # The resulting wheel will be compatible with almost all x86_64 CPUs from the last 10 years.
 mv wheels/llama_cpp_python-0.3.26-cp312-cp312-linux_x86_64.whl wheels/llama_cpp_python-0.3.26+cu128-avx2-cp312-cp312-linux_x86_64.whl
+
+#THEN, do it all again w/ -DCMAKE_CUDA_ARCHITECTURES=100;120;120-virtual for Blackwell, Hopper, +ptx and name the new wheel appropriately
+#AND repeat the entire thing for each version of Python (container is currently running 2.12, since that's what the cu128 base image runs)
 ```
 
 ---
