@@ -217,7 +217,7 @@ echo.
 echo [STEP 3.5] Installing Audio Intelligence Stack (Qwen2-Audio Support)...
 echo [INFO] Adding librosa, soundfile and updating transformers...
 uv pip install librosa soundfile numpy --link-mode hardlink
-uv pip install --upgrade transformers accelerate huggingface_hub --link-mode hardlink
+uv pip install transformers accelerate huggingface_hub --link-mode hardlink
 :: ------------------------
 
 echo.
