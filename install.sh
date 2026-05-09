@@ -172,7 +172,7 @@ echo ""
 echo "[STEP 3.5] Installing Audio Intelligence Stack (Qwen2-Audio Support)..."
 echo "[INFO] Adding librosa, soundfile and updating transformers..."
 uv pip install $INSTALL_ARGS librosa soundfile --link-mode hardlink
-uv pip install $INSTALL_ARGS --upgrade transformers accelerate huggingface_hub --link-mode hardlink
+uv pip install $INSTALL_ARGS transformers accelerate huggingface_hub --link-mode hardlink
 
 
 echo ""
