@@ -159,7 +159,7 @@ echo(%MAJOR_CAP% | findstr /r "^[0-9][0-9]*$" >nul
 if errorlevel 1 goto gpu_detect_done
 
 REM Now it's safe to compare numerically
-if %MAJOR_CAP% GEQ 9 (
+if !MAJOR_CAP! GEQ 9 (
     echo [INFO] Modern GPU detected (Hopper/Blackwell). Selecting optimized Blackwell wheel.
     set "IS_MODERN_GPU=true"
 )
