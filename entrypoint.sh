@@ -41,7 +41,10 @@ if command -v nvidia-smi &> /dev/null; then
 
         BW_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_Blackwell-cp312-cp312-linux_x86_64.whl"
         BW_WHEEL_SHA256="89071f3c7452d24c9442677b7b8bed3d2b1d7ef7a3ca8e05580160aa965cb607"
-        TEMP_WHEEL="/tmp/llama_cpp_bw.whl"
+        # uv parses version/python-tag/platform straight from a local wheel's
+        # filename (PEP 427) - it must keep its real name, not a renamed alias,
+        # or "uv pip install" rejects it with "Must have a version".
+        TEMP_WHEEL="/tmp/$(basename "$BW_WHEEL_URL")"
 
         echo "[INFO] Downloading Blackwell optimized wheel..."
         if curl -L -o "$TEMP_WHEEL" "$BW_WHEEL_URL"; then
