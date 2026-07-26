@@ -60,6 +60,11 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
+      # core.filemode=false on this repo (Windows-authored), so a script's
+      # +x bit isn't reliably preserved through git from a Windows commit.
+      # Don't depend on the checked-out mode being right - force it.
+      - name: Ensure scripts are executable
+        run: chmod +x tests/fixtures/nvidia-smi tests/test_gpu_detect.sh install.sh entrypoint.sh
       - name: Ensure ffmpeg present
         run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
       - name: Run GPU detection regression test
@@ -130,6 +135,11 @@ jobs:
             expect_modern: "true"
     steps:
       - uses: actions/checkout@v4
+      # core.filemode=false on this repo (Windows-authored), so a script's
+      # +x bit isn't reliably preserved through git from a Windows commit.
+      # Don't depend on the checked-out mode being right - force it.
+      - name: Ensure scripts are executable
+        run: chmod +x tests/fixtures/nvidia-smi tests/test_gpu_detect.sh install.sh entrypoint.sh
       - name: Ensure ffmpeg present
         run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
       - uses: astral-sh/setup-uv@v5
@@ -176,6 +186,11 @@ jobs:
             expect_modern: "true"
     steps:
       - uses: actions/checkout@v4
+      # core.filemode=false on this repo (Windows-authored), so a script's
+      # +x bit isn't reliably preserved through git from a Windows commit.
+      # Don't depend on the checked-out mode being right - force it.
+      - name: Ensure scripts are executable
+        run: chmod +x tests/fixtures/nvidia-smi entrypoint.sh
       - uses: docker/setup-buildx-action@v3
 
       - name: Build image (local cache-only, no push)
@@ -193,6 +208,11 @@ jobs:
           docker run -d --name gputest --entrypoint sleep gpu-detect-test:latest infinity
           docker cp tests/fixtures/nvidia-smi gputest:/usr/local/bin/nvidia-smi
           docker exec gputest chmod +x /usr/local/bin/nvidia-smi
+          echo "--- diagnostics: fake nvidia-smi inside container ---"
+          docker exec gputest ls -la /usr/local/bin/nvidia-smi
+          docker exec gputest sh -c 'command -v nvidia-smi && echo FOUND || echo NOT_FOUND'
+          docker exec -e FAKE_COMPUTE_CAP="${{ matrix.compute_cap }}" gputest nvidia-smi --query-gpu=compute_cap --format=csv,noheader
+          echo "--- running entrypoint.sh ---"
           docker exec -e CI_DETECT_ONLY=true -e FAKE_COMPUTE_CAP="${{ matrix.compute_cap }}" gputest /workspace/entrypoint.sh
 
       - name: Verify installed llama-cpp-python variant matches expectation
