@@ -159,6 +159,23 @@ call :detect_gpu_wheel
 
 echo [INFO] Downloading wheel for verification...
 curl -L -o "%WHEEL_FILE%" "%WIN_WHEEL_URL%"
+if %errorlevel% equ 35 (
+    echo.
+    echo [WARNING] Standard download failed: TLS certificate revocation check error.
+    echo ======================================================================
+    echo   SECURITY NOTICE: RETRYING DOWNLOAD WITH REVOCATION CHECK DISABLED
+    echo ======================================================================
+    echo   This is common on school/corporate networks and VPNs that intercept
+    echo   or block certificate revocation checks - it does NOT mean this file
+    echo   or your connection is compromised.
+    echo.
+    echo   The download will still be verified against a SHA256 checksum
+    echo   pinned in this script before anything is installed. If that check
+    echo   fails, installation stops immediately.
+    echo ======================================================================
+    echo.
+    curl -L --ssl-no-revoke -o "%WHEEL_FILE%" "%WIN_WHEEL_URL%"
+)
 if %errorlevel% neq 0 (
     echo [ERROR] Download failed.
     pause
