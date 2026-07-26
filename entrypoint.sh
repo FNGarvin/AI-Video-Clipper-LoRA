@@ -48,8 +48,11 @@ if command -v nvidia-smi &> /dev/null; then
              echo "$BW_WHEEL_SHA256  $TEMP_WHEEL" | sha256sum -c -
              if [ $? -eq 0 ]; then
                  echo "[INFO] Checksum verified. Hot-swapping llama-cpp-python..."
-                 uv pip install --system "$TEMP_WHEEL" --no-deps --force-reinstall
-                 echo "[SUCCESS] System optimized for Blackwell/Hopper."
+                 if uv pip install --system --break-system-packages "$TEMP_WHEEL" --no-deps --force-reinstall; then
+                     echo "[SUCCESS] System optimized for Blackwell/Hopper."
+                 else
+                     echo "[WARNING] Failed to install optimized wheel (system Python may be externally managed). Falling back to standard build."
+                 fi
              else
                  echo "[WARNING] Checksum verification failed for optimized wheel. Falling back to standard build."
              fi

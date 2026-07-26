@@ -97,9 +97,14 @@ jobs:
           enable-cache: true
           cache-dependency-glob: "pyproject.toml"
 
+      # Use the github.workspace *expression* (substituted by the workflow
+      # engine itself, in native Windows path form) rather than shell-native
+      # $PWD - Git Bash's $PWD renders POSIX-style (e.g. /d/a/repo/repo),
+      # and the *next* step runs under cmd.exe, whose executable search
+      # can't resolve a drive-letter-less POSIX path written into PATH.
       - name: Add fake nvidia-smi to PATH
         shell: bash
-        run: echo "$PWD/tests/fixtures" >> "$GITHUB_PATH"
+        run: echo '${{ github.workspace }}/tests/fixtures' >> "$GITHUB_PATH"
 
       - name: Run full install (${{ matrix.label }})
         shell: cmd
