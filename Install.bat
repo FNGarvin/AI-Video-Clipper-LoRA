@@ -152,10 +152,10 @@ for /f "tokens=1 delims=." %%a in ('nvidia-smi --query-gpu=compute_cap --format=
 REM If we got nothing from nvidia-smi, skip GPU-specific logic
 if not defined MAJOR_CAP goto gpu_detect_done
 
-echo [INFO] Detected NVIDIA GPU Compute Capability Major: %MAJOR_CAP%
+echo [INFO] Detected NVIDIA GPU Compute Capability Major: !MAJOR_CAP!
 
 REM Check if MAJOR_CAP is numeric (avoid "N/A" or garbage)
-echo(%MAJOR_CAP% | findstr /r "^[0-9][0-9]*$" >nul
+echo(!MAJOR_CAP!| findstr /r "^[0-9][0-9]*$" >nul
 if errorlevel 1 goto gpu_detect_done
 
 REM Now it's safe to compare numerically
@@ -166,11 +166,11 @@ if !MAJOR_CAP! GEQ 9 (
 
 :gpu_detect_done
 
-if "%IS_MODERN_GPU%"=="false" (
+if "!IS_MODERN_GPU!"=="false" (
     echo [INFO] Standard GPU detected. Selecting standard universal wheel.
 )
 
-if "%IS_MODERN_GPU%"=="true" (
+if "!IS_MODERN_GPU!"=="true" (
     set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_Blackwell-cp310-cp310-win_amd64.whl"
     set "WIN_WHEEL_SHA256=6c13577479d21d51832b2b0f5a75dc64a76ed40ed3f97c9e46bdcf666e286b69"
     set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128_Blackwell-cp310-cp310-win_amd64.whl"
