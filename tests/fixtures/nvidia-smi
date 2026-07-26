@@ -1,0 +1,14 @@
+#!/bin/bash
+# Fake nvidia-smi for Linux tests (install.sh, entrypoint.sh). Emulates just
+# enough of `nvidia-smi --query-gpu=compute_cap --format=...noheader` for the
+# GPU detection logic to be tested without real GPU hardware.
+#
+# Controlled entirely via the FAKE_COMPUTE_CAP env var set by the test
+# harness: set it to "NONE" to emulate no NVIDIA GPU present (nvidia-smi
+# missing/erroring), or to a compute_cap string (e.g. "12.0", "8.9", "N/A")
+# to emulate nvidia-smi's real stdout for a given GPU.
+if [ "$FAKE_COMPUTE_CAP" = "NONE" ]; then
+    exit 9
+fi
+echo "$FAKE_COMPUTE_CAP"
+exit 0

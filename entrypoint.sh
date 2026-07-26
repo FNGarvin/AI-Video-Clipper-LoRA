@@ -30,13 +30,15 @@ mkdir -p /run/sshd
 
 # --- Runtime GPU Optimization (Hot-Swap) ---
 if command -v nvidia-smi &> /dev/null; then
-    COMPUTE_CAP=$(nvidia-smi --query-gpu=compute_cap --format=noheader,csv | head -n 1)
+    COMPUTE_CAP=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -n 1)
     echo "[INFO] Detected NVIDIA GPU Compute Capability: $COMPUTE_CAP"
     MAJOR_CAP=$(echo "$COMPUTE_CAP" | cut -d'.' -f1)
-    
-    if [ "$MAJOR_CAP" -ge 9 ]; then
+
+    # Reject "N/A" or other non-numeric nvidia-smi output before comparing
+    # (bash's -ge throws "integer expression expected" on non-numeric input).
+    if [[ "$MAJOR_CAP" =~ ^[0-9]+$ ]] && [ "$MAJOR_CAP" -ge 9 ]; then
         echo "[INFO] Modern GPU detected (Hopper/Blackwell). Optimizing AI stack for peak performance..."
-        
+
         BW_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_Blackwell-cp312-cp312-linux_x86_64.whl"
         BW_WHEEL_SHA256="89071f3c7452d24c9442677b7b8bed3d2b1d7ef7a3ca8e05580160aa965cb607"
         TEMP_WHEEL="/tmp/llama_cpp_bw.whl"
@@ -60,6 +62,15 @@ if command -v nvidia-smi &> /dev/null; then
     fi
 else
     echo "[INFO] No NVIDIA GPU detected via nvidia-smi. Running in CPU/Fallback mode."
+fi
+
+# Test hook: stop right after the hot-swap check above, before Filebrowser
+# and the (long-running, app-serving) exec below. Used by
+# tests/test_gpu_detect.sh / CI to verify this logic inside a real
+# container against a stubbed nvidia-smi without booting the full app.
+if [ "$CI_DETECT_ONLY" = "true" ]; then
+    echo "[DETECT-ONLY] Exiting after GPU hot-swap check (CI mode)."
+    exit 0
 fi
 
 # --- Filebrowser Setup ---

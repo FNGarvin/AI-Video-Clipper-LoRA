@@ -57,14 +57,28 @@ if %errorlevel% neq 0 (
 :: Argument parsing
 set "RESET_VENV=false"
 set "NO_PAUSE=false"
+set "DETECT_ONLY=false"
 
 :parse_args
 if "%~1"=="" goto end_parse_args
 if /i "%~1"=="--reset" set "RESET_VENV=true"
 if /i "%~1"=="--no-pause" set "NO_PAUSE=true"
+if /i "%~1"=="--detect-only" set "DETECT_ONLY=true"
 shift
 goto parse_args
 :end_parse_args
+
+:: Test hook: resolve GPU/wheel selection and exit immediately, before
+:: touching the venv, network, or any installs. Used by tests\test_gpu_detect.bat
+:: to verify the detection logic in isolation against a stubbed nvidia-smi.
+if not "%DETECT_ONLY%"=="true" goto after_detect_only
+call :detect_gpu_wheel
+echo [DETECT-ONLY] IS_MODERN_GPU=%IS_MODERN_GPU%
+echo [DETECT-ONLY] WHEEL_FILE=%WHEEL_FILE%
+echo [DETECT-ONLY] WIN_WHEEL_URL=%WIN_WHEEL_URL%
+echo [DETECT-ONLY] WIN_WHEEL_SHA256=%WIN_WHEEL_SHA256%
+exit /b 0
+:after_detect_only
 
 echo.
 echo [STEP 1/3] Preparing isolated environment (uv)...
@@ -141,44 +155,7 @@ uv pip install ^
     "torch==2.10.0+cu128" "torchvision==0.25.0+cu128" "torchaudio==2.10.0+cu128"
 
 echo [INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)...
-REM GPU Architecture Detection
-set "IS_MODERN_GPU=false"
-set "MAJOR_CAP="
-
-for /f "tokens=1 delims=." %%a in ('nvidia-smi --query-gpu=compute_cap --format=noheader 2^>nul') do (
-    set "MAJOR_CAP=%%a"
-)
-
-REM If we got nothing from nvidia-smi, skip GPU-specific logic
-if not defined MAJOR_CAP goto gpu_detect_done
-
-echo [INFO] Detected NVIDIA GPU Compute Capability Major: !MAJOR_CAP!
-
-REM Check if MAJOR_CAP is numeric (avoid "N/A" or garbage)
-echo(!MAJOR_CAP!| findstr /r "^[0-9][0-9]*$" >nul
-if errorlevel 1 goto gpu_detect_done
-
-REM Now it's safe to compare numerically
-if !MAJOR_CAP! GEQ 9 (
-    echo [INFO] Modern GPU detected (Hopper/Blackwell). Selecting optimized Blackwell wheel.
-    set "IS_MODERN_GPU=true"
-)
-
-:gpu_detect_done
-
-if "!IS_MODERN_GPU!"=="false" (
-    echo [INFO] Standard GPU detected. Selecting standard universal wheel.
-)
-
-if "!IS_MODERN_GPU!"=="true" (
-    set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_Blackwell-cp310-cp310-win_amd64.whl"
-    set "WIN_WHEEL_SHA256=6c13577479d21d51832b2b0f5a75dc64a76ed40ed3f97c9e46bdcf666e286b69"
-    set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128_Blackwell-cp310-cp310-win_amd64.whl"
-) else (
-    set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128-cp310-cp310-win_amd64.whl"
-    set "WIN_WHEEL_SHA256=d199417da48fb5158390920aa100a0fac4a5c5139059a3e843dad6a7a6461977"
-    set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128-cp310-cp310-win_amd64.whl"
-)
+call :detect_gpu_wheel
 
 echo [INFO] Downloading wheel for verification...
 curl -L -o "%WHEEL_FILE%" "%WIN_WHEEL_URL%"
@@ -232,3 +209,49 @@ echo You can now run the program using "Run.bat".
 echo.
 echo.
 if "%NO_PAUSE%"=="false" pause
+exit /b 0
+
+:: --------------------------------------------------------------------
+:: GPU architecture detection + llama-cpp-python wheel selection.
+::
+:: Written with only single-line "if" statements and "goto" - no
+:: multi-line parenthesized if/else blocks. cmd.exe's parser miscounts
+:: parentheses that appear in echoed text *inside* a parenthesized
+:: block (even balanced ones, e.g. "(Hopper/Blackwell)"), which is what
+:: broke GPU detection before: https://github.com/cyberbol/AI-Video-Clipper-LoRA/issues/13
+:: Keeping this routine block-free avoids that entire bug class.
+::
+:: Sets: IS_MODERN_GPU, WHEEL_FILE, WIN_WHEEL_URL, WIN_WHEEL_SHA256
+:: --------------------------------------------------------------------
+:detect_gpu_wheel
+set "IS_MODERN_GPU=false"
+set "MAJOR_CAP="
+
+for /f "tokens=1 delims=." %%a in ('nvidia-smi --query-gpu=compute_cap --format=csv^,noheader 2^>nul') do set "MAJOR_CAP=%%a"
+
+if not defined MAJOR_CAP goto wheel_standard
+
+echo [INFO] Detected NVIDIA GPU Compute Capability Major: %MAJOR_CAP%
+
+REM Reject "N/A" or other non-numeric nvidia-smi output before comparing.
+echo(%MAJOR_CAP%| findstr /r "^[0-9][0-9]*$" >nul
+if errorlevel 1 goto wheel_standard
+
+if %MAJOR_CAP% LSS 9 goto wheel_standard
+
+set "IS_MODERN_GPU=true"
+echo [INFO] Modern GPU detected - Hopper or Blackwell class. Selecting optimized wheel.
+goto wheel_modern
+
+:wheel_standard
+echo [INFO] Standard GPU detected. Selecting standard universal wheel.
+set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128-cp310-cp310-win_amd64.whl"
+set "WIN_WHEEL_SHA256=d199417da48fb5158390920aa100a0fac4a5c5139059a3e843dad6a7a6461977"
+set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128-cp310-cp310-win_amd64.whl"
+goto :eof
+
+:wheel_modern
+set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_Blackwell-cp310-cp310-win_amd64.whl"
+set "WIN_WHEEL_SHA256=6c13577479d21d51832b2b0f5a75dc64a76ed40ed3f97c9e46bdcf666e286b69"
+set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128_Blackwell-cp310-cp310-win_amd64.whl"
+goto :eof
