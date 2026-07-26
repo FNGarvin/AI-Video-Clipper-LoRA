@@ -72,6 +72,15 @@ For developers needing to support new CUDA versions or custom model architecture
 
 ## 📜 Changelog
 
+<details open>
+<summary><b>v5.2 - Blackwell Detection & Installer Hardening</b></summary>
+
+* **Fixed RTX 5090/Blackwell wheel detection on Windows:** a cmd.exe parser bug in `Install.bat` was silently falling back to the standard `llama-cpp-python` wheel on Blackwell GPUs instead of the CUDA-optimized build, with no error shown ([#13](https://github.com/cyberbol/AI-Video-Clipper-LoRA/issues/13)).
+* Rewrote the GPU-detection logic on Windows, Linux, and inside the Docker image to be immune to this whole class of bug, and fixed matching (previously silent) failures in the Linux install path and the container's runtime hot-swap.
+* **Added an automated regression test suite** (`tests/`) plus CI that verifies the correct wheel is installed for both pre- and post-Blackwell GPUs, on Windows, native Linux, and inside the Docker container.
+* **`Install.bat` now recovers automatically** from a common school/corporate-network failure mode (TLS certificate revocation checks blocked by a proxy or firewall): if the wheel download fails specifically with that error, it retries once with revocation checking disabled, with a clear on-screen warning. The SHA256 checksum verification is unchanged and remains the real safety net either way.
+</details>
+
 <details>
 <summary><b>v5.0 - The Modular Speed Update</b></summary>
 
