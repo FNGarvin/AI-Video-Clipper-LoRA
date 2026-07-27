@@ -1,0 +1,9 @@
+# Force LF for anything that gets exec'd on Linux/in containers or parsed
+# by tools that don't tolerate CRLF, regardless of a contributor's local
+# core.autocrlf setting. Without this, Windows checkouts can silently
+# corrupt shebang lines (`#!/bin/bash\r` doesn't resolve on Linux) - see
+# the "./install.sh: not found" Container Build failure this fixed.
+* text=auto eol=lf
+
+# Windows batch files need CRLF.
+*.bat text eol=crlf
