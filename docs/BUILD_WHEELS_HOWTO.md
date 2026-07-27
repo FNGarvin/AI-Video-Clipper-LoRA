@@ -1,105 +1,170 @@
 # Building CUDA-Accelerated llama-cpp-python Wheels
 
-This guide provides the workflow for manually building `llama-cpp-python` wheels with CUDA support. This is required when upgrading the CUDA runtime (e.g., from 12.8) or supporting newer model architectures not covered by standard releases.
+This project depends on custom-built `llama-cpp-python` wheels: CUDA 12.8, and
+(as of the rebuild described here) a single universal wheel per platform that
+covers every supported GPU architecture from Turing through Blackwell. There
+is no more "standard" vs "Blackwell" wheel split - one wheel per platform now
+works on all of them.
 
-## Prerequisites
+## The bug that started this rewrite
 
-* **NVIDIA CUDA Toolkit:** Installed (the version MUST match the one torch et al. are using) and `nvcc` available in the system PATH.  You can download it from [here](https://developer.nvidia.com/cuda-downloads).
-* **C++ Compiler:** * **Windows:** [Visual Studio 2022 Community with C++ workloads](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
-    * **Linux:** `gcc`, `g++`, and `cmake`.
-* **Python:** 3.10+ (or whatever the project is using at the time).
+The original hand-built wheels (referenced by the old `v5.0-deps` release)
+had a real architecture-selection bug:
+
+* **Windows Blackwell build:** the build never set `-DCMAKE_CUDA_ARCHITECTURES`
+  at all. Without it, CMake/nvcc falls back to auto-detecting the
+  architecture of whatever GPU is physically installed on the *build*
+  machine - not the target. If the machine doing the build had a different
+  GPU installed (e.g. an Ada card) at the time, the resulting "Blackwell"
+  wheel would silently contain kernels for the wrong architecture.
+* **Linux Blackwell instructions (below, historical):** told you to pass
+  `-DCMAKE_CUDA_ARCHITECTURES=90`. That's Hopper (H100), not Blackwell -
+  Blackwell is `sm_100`/`sm_101` (datacenter) and `sm_120` (RTX 50-series).
+* **The actual build automation** (`scripts/build_universal_linux.sh`, now
+  removed): its `BW_ARCH` variable was `-DCMAKE_CUDA_ARCHITECTURES=80;86;89;90a`
+  - Ampere/Ada plus Hopper's architecture-specific `90a`, but **still no
+  `100`/`101`/`120`**. The currently-shipped `_Blackwell`-suffixed wheels
+  were built from this script, so they most likely never contained real
+  Blackwell (sm_120) kernels at all - this is almost certainly the actual
+  cause of the RTX 5090 misbehavior that prompted this whole rebuild.
+
+Building in CI on a GPU-less runner makes this whole bug class structurally
+impossible: there's no local GPU to auto-detect off of, and the architecture
+list is spelled out explicitly in the workflow. If you ever forget to set it,
+the build fails loudly instead of silently miscompiling.
 
 ---
 
-## Windows Build Process
+## Primary path: the CI workflow (recommended)
 
-Perform these steps in a **Developer PowerShell for VS 2022** console.
+`.github/workflows/build-llama-wheels.yml` builds all 3 wheels this repo
+needs, on demand (`workflow_dispatch` only - it never runs automatically):
 
-### 1. Environment Preparation
+| Wheel | Platform | Python | Used by |
+|---|---|---|---|
+| Windows | `win_amd64` | 3.10 | `Install.bat` |
+| Linux (native) | `linux_x86_64` | 3.10 | `install.sh` |
+| Linux (container) | `linux_x86_64` | 3.12 | `Dockerfile` (matches the `pytorch/pytorch` base image's system Python) |
+
+To run it:
 ```powershell
-# Clone the project and enter the directory
-git clone https://github.com/cyberbol/AI-Video-Clipper-LoRA.git
-cd AI-Video-Clipper-LoRA
+gh workflow run build-llama-wheels.yml -f release_tag=v5.1-llama-deps
+```
+Each wheel gets a [SLSA build provenance
+attestation](https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations)
+via `actions/attest-build-provenance`, binding it to the exact workflow run
+and source commit that produced it. All 3 wheels + a `SHA256SUMS.txt` land as
+assets on a **prerelease** (so it doesn't interfere with "latest" tagging,
+matching how `v5.0-deps` was published).
 
-# Run the project installer to establish the base environment
-.\install.bat
-# Don't worry if it doesn't finish to completion.  The key is that it installs the virtual environment and ensures your development environment is prepared for the correct version of Python, etc.
+To verify a downloaded wheel's provenance:
+```powershell
+gh attestation verify llama_cpp_python-0.3.26+cu128-cp310-cp310-win_amd64.whl --owner cyberbol
+```
 
+### Source pin
 
-# Activate the virtual environment
+The workflow builds from the [JamePeng
+fork](https://github.com/JamePeng/llama-cpp-python) - see the Acknowledgements
+in the main README - pinned to **immutable commit SHAs**, not a branch or
+floating tag:
+
+```yaml
+LLAMA_CPP_PYTHON_LINUX_REF: "32f2380ec8ebfa0d5f01c22e3ba86d8d5e762882"
+LLAMA_CPP_PYTHON_WIN_REF:   "3d0fd1b75ee564361a4babf21f88855225ba1fe0"
+```
+
+These are JamePeng's own tagged v0.3.26 cu128 release commits
+(`v0.3.26-cu128-Basic-linux-20260219` / `v0.3.26-cu128-Basic-win-20260220`).
+This is intentionally **not** an upgrade - it rebuilds the exact version this
+project already ships, just correctly and with attestation. JamePeng tags a
+release per (version, CUDA version, platform), so if you ever do want to bump
+the llama-cpp-python version, find the new commit with:
+
+```bash
+git ls-remote --tags https://github.com/JamePeng/llama-cpp-python.git | grep "cu128"
+```
+
+and update both `LLAMA_CPP_PYTHON_*_REF` values in the workflow - along with
+a quick check that the CMake flags in the workflow still match whatever
+JamePeng's own workflow used *at that commit* (fetch
+`https://raw.githubusercontent.com/JamePeng/llama-cpp-python/<COMMIT_SHA>/.github/workflows/build-wheels-cu128-{linux,win}.yml`,
+not their `main` branch - the build recipe has changed over time, and a
+newer recipe isn't guaranteed to apply cleanly to an older pinned commit).
+
+### After a run completes
+
+Download the new wheels' SHA256 hashes from the release (or `SHA256SUMS.txt`)
+and update the pinned URLs/hashes in `Install.bat`, `install.sh`, and
+`entrypoint.sh`.
+
+---
+
+## Manual/local build (fallback only)
+
+Only needed if you're iterating on a build locally and don't want to wait on
+CI. **Always pass an explicit, correct `CMAKE_CUDA_ARCHITECTURES` list** -
+never leave it unset, and never use `=90` expecting it to mean Blackwell.
+
+### Prerequisites
+
+* **NVIDIA CUDA Toolkit 12.8.1**, `nvcc` on PATH.
+* **C++ Compiler:** Windows: [Visual Studio 2022 Community with C++
+  workloads](https://visualstudio.microsoft.com/visual-cpp-build-tools/).
+  Linux: `gcc`, `g++`, `cmake`.
+* **Python:** 3.10 or 3.12, matching the target wheel.
+
+### Windows (Developer PowerShell for VS 2022)
+
+```powershell
+git clone https://github.com/JamePeng/llama-cpp-python.git
+cd llama-cpp-python
+git checkout 3d0fd1b75ee564361a4babf21f88855225ba1fe0
+git submodule update --init --recursive
+
+uv venv .venv --python 3.10 --seed
 .\.venv\Scripts\Activate.ps1
+uv pip install --upgrade build setuptools wheel packaging ninja
+
+$env:CUDA_PATH = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8"
+$env:VERBOSE = "1"
+
+# Turing through Blackwell (consumer + datacenter), "Basic" CPU baseline
+# (no AVX/AVX2 - GPU offload is what matters here, not CPU SIMD).
+$env:CMAKE_ARGS = "-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=75-real;80-real;86-real;87-real;89-real;90-real;100-real;101-real;120-real -DGGML_CUDA_FORCE_MMQ=on -DCUDA_SEPARABLE_COMPILATION=on -DENABLE_CCACHE=on -DLLAMA_CURL=off -DGGML_NATIVE=off -DGGML_AVX=off -DGGML_AVX2=off -DGGML_AVX_VNNI=off -DGGML_AVX512=off -DGGML_AVX512_VBMI=off -DGGML_AVX512_VNNI=off -DGGML_AVX512_BF16=off -DGGML_FMA=off -DGGML_F16C=off"
+
+python -m build --wheel
+# Rename dist\llama_cpp_python-0.3.26-*.whl -> ...+cu128-*.whl to match the pin in Install.bat
 ```
 
-### 2. Compile the Wheel
-```powershell
-# Ensure the cache is clear for this package
-uv cache clean llama-cpp-python
+### Linux
 
-# Install Build Requirements (Ninja avoids the slow, sequential MSBuild generator!)
-uv pip install ninja scikit-build-core cmake
-
-# Set Build Environment Variables
-# Tell CMake to use Ninja instead of the slow MSBuild
-$env:CMAKE_GENERATOR = "Ninja"
-$env:FORCE_CMAKE = "1"
-
-# IMPORTANT:Change this to your CUDA installation path
-$env:CUDA_PATH = "C:\Program Files\NVIDIA GPU Computing Toolkit\CUDA\v12.8" 
-
-# Instruct the MSVC C/C++ compiler to use ALL available CPU cores
-$env:CFLAGS = "/MP"
-$env:CXXFLAGS = "/MP"
-
-# The number of parallel build jobs (Set to your CPU Thread Count)
-$env:CMAKE_BUILD_PARALLEL_LEVEL = "16"
-
-# Compiler Args - Disable AVX512 for broad compatibility unless you have a modern workstation CPU
-$env:CMAKE_ARGS = "-DGGML_CUDA=on -DCMAKE_BUILD_TYPE=Release -DLLAMA_AVX512=OFF"
-
-# Build the wheel from the JamePeng fork (or latest supported source)
-pip wheel git+https://github.com/JamePeng/llama-cpp-python.git@main --no-deps --wheel-dir=wheels --no-cache-dir
-
-# Rename the artifact to indicate CUDA support
-# Note: Ensure the filename matches the version generated in the \wheels folder
-ren wheels\llama_cpp_python-0.3.16-cp310-cp310-win_amd64.whl llama_cpp_python-0.3.16+cu128-cp310-cp310-win_amd64.whl
-```
-
----
-
-## Linux Build Process
-
-### 1. Environment Preparation
 ```bash
-#use whatever version of python matches the current base image
-uv venv .venv --python 3.12 --seed --managed-python --link-mode hardlink
+git clone https://github.com/JamePeng/llama-cpp-python.git
+cd llama-cpp-python
+git checkout 32f2380ec8ebfa0d5f01c22e3ba86d8d5e762882
+git submodule update --init --recursive
+
+uv venv .venv --python 3.10 --seed   # or 3.12 for the container wheel
 source .venv/bin/activate
-```
+uv pip install --upgrade build setuptools wheel packaging
 
-### 2. Compile the Wheel
-```bash
-# Ensure the cache is clear
-uv cache clean llama-cpp-python
+export CUDA_HOME=/usr/local/cuda
+export VERBOSE=1
+export CMAKE_ARGS="-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES='75-real;80-real;86-real;87-real;89-real;90-real;100-real;101-real;120-real' -DGGML_CUDA_FORCE_MMQ=on -DLLAMA_CURL=off -DLLAMA_OPENSSL=on -DGGML_NATIVE=off -DGGML_AVX=off -DGGML_AVX2=off -DGGML_AVX_VNNI=off -DGGML_AVX512=off -DGGML_AVX512_VBMI=off -DGGML_AVX512_VNNI=off -DGGML_AVX512_BF16=off -DGGML_FMA=off -DGGML_F16C=off"
 
-# Build using inline environment variables
-# IMPORTANT: Use -DLLAMA_AVX512=OFF to prevent "Illegal instruction" on non-AVX512 CPUs (like many Runpod nodes)
-# IMPORTANT: If targeting RTX 5090 or other Blackwell GPUs, you MUST include -DCMAKE_CUDA_ARCHITECTURES=90
-export PATH=/usr/local/cuda/bin:$PATH
-export CUDACXX=/usr/local/cuda/bin/nvcc
-export FORCE_CMAKE=1
-export CUDA_PATH=/usr/local/cuda
-export CMAKE_ARGS="-DGGML_CUDA=ON -DLLAMA_AVX512=OFF -DCMAKE_CUDA_ARCHITECTURES=all -DCMAKE_BUILD_TYPE=Release"
-export CMAKE_BUILD_PARALLEL_LEVEL=8 
-pip wheel git+https://github.com/JamePeng/llama-cpp-python.git --no-deps --wheel-dir=wheels --no-cache-dir
-
-# Rename the artifact to indicate the Universal/AVX2 status
-# The resulting wheel will be compatible with almost all x86_64 CPUs from the last 10 years.
-mv wheels/llama_cpp_python-0.3.26-cp312-cp312-linux_x86_64.whl wheels/llama_cpp_python-0.3.26+cu128-avx2-cp312-cp312-linux_x86_64.whl
+python -m build --wheel
+# Rename dist/llama_cpp_python-0.3.26-*.whl -> ...+cu128-*.whl to match the pin in install.sh/entrypoint.sh
 ```
 
 ---
 
 ## Deployment
-1. Upload the renamed `.whl` files to a GitHub Release.
-2. Update `install.sh` and `install.bat` to reference the new download URLs for these specific wheels.
 
-// END OF BUILDING_WHEELS.md
+1. Trigger `build-llama-wheels.yml` (or build manually per above).
+2. Verify the wheels' attestations (`gh attestation verify ...`) and, ideally,
+   smoke-test the Blackwell path on real Blackwell hardware before trusting it.
+3. Update the pinned URLs/SHA256 hashes in `Install.bat`, `install.sh`, and
+   `entrypoint.sh` to point at the new release assets.
+
+// END OF BUILD_WHEELS_HOWTO.md

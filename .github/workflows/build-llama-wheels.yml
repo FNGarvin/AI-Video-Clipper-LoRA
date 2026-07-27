@@ -1,0 +1,293 @@
+# FNGarvin - Attested llama-cpp-python Wheel Builder
+#
+# On-demand only (workflow_dispatch). Builds the 3 CUDA-accelerated
+# llama-cpp-python wheels this repo actually consumes:
+#   - Windows,        Python 3.10  (Install.bat / native Windows)
+#   - Linux,          Python 3.10  (install.sh / native Linux/WSL)
+#   - Linux,          Python 3.12  (Dockerfile / container, matches the
+#                                    pytorch/pytorch base image's system Python)
+#
+# Each wheel targets ALL supported CUDA architectures in one universal
+# binary (Turing through Blackwell - see CUDAARCHVER below), so there is
+# no more "standard vs Blackwell" wheel split, and no runtime hot-swap.
+# This directly replaces the previous hand-built wheels, which shipped
+# with a real arch-selection bug: the Windows Blackwell build never set
+# -DCMAKE_CUDA_ARCHITECTURES at all (so CMake/nvcc silently auto-detected
+# off the build machine's own GPU), and the Linux build doc told you to
+# use "=90", which is Hopper, not Blackwell (sm_120). Building on a
+# GPU-less GitHub-hosted runner with an explicit arch list makes that
+# whole bug class structurally impossible: there is nothing to
+# auto-detect, and the arch list is spelled out right here.
+#
+# Source is pinned to immutable commit SHAs on the JamePeng fork (not a
+# branch or tag) - the exact commits JamePeng themselves tagged as the
+# v0.3.26 cu128 release for each platform - so this is NOT an upgrade,
+# just a re-build of the same version with a correct, explicit, fully
+# attested build process. See docs/BUILD_WHEELS_HOWTO.md for how these
+# commits were identified and how to bump them if a real upgrade is
+# ever wanted.
+#
+# Every wheel gets a SLSA build provenance attestation
+# (actions/attest-build-provenance) binding it to this workflow run and
+# source commit. Verify any downloaded wheel with:
+#   gh attestation verify <wheel-file> --owner <this-repo-owner>
+
+name: Build Attested llama-cpp-python Wheels
+
+on:
+  workflow_dispatch:
+    inputs:
+      release_tag:
+        description: "Tag for the release these wheels get published under"
+        required: true
+        default: "v5.1-llama-deps"
+
+permissions:
+  contents: read
+
+env:
+  CUDAVER: "12.8.1"
+  # Turing / Ampere / Ada / Hopper / Blackwell (consumer + datacenter),
+  # "-real" = embed SASS only (no PTX) for each listed arch - matches
+  # exactly what JamePeng's own build used for this commit, keeps wheel
+  # size sane vs "all"/PTX-inclusive builds.
+  CUDAARCHVER: "75-real;80-real;86-real;87-real;89-real;90-real;100-real;101-real;120-real"
+  # Immutable commit SHAs, not branches/tags - see docs/BUILD_WHEELS_HOWTO.md.
+  # These are JamePeng/llama-cpp-python's own tagged v0.3.26 cu128 release
+  # commits (v0.3.26-cu128-Basic-linux-20260219 / -win-20260220).
+  LLAMA_CPP_PYTHON_LINUX_REF: "32f2380ec8ebfa0d5f01c22e3ba86d8d5e762882"
+  LLAMA_CPP_PYTHON_WIN_REF: "3d0fd1b75ee564361a4babf21f88855225ba1fe0"
+
+concurrency:
+  group: build-llama-wheels-${{ github.workflow }}
+  cancel-in-progress: false
+
+jobs:
+  # ------------------------------------------------------------------
+  build-windows:
+    name: Build Windows wheel (py${{ matrix.pyver }})
+    runs-on: windows-2022
+    permissions:
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        pyver: ["3.10"]
+    defaults:
+      run:
+        shell: pwsh
+    env:
+      MAX_JOBS: 8
+    steps:
+      - name: Checkout llama-cpp-python (JamePeng fork, pinned commit)
+        uses: actions/checkout@v4
+        with:
+          repository: JamePeng/llama-cpp-python
+          ref: ${{ env.LLAMA_CPP_PYTHON_WIN_REF }}
+          submodules: recursive
+
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v2
+        with:
+          msbuild-architecture: x64
+
+      - name: Install CUDA ${{ env.CUDAVER }}
+        uses: N-Storm/cuda-toolkit@v0.2.28
+        id: cuda-toolkit
+        with:
+          cuda: ${{ env.CUDAVER }}
+          use-github-cache: false
+
+      - name: Install uv and Python ${{ matrix.pyver }}
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.pyver }}
+          activate-environment: true
+          enable-cache: true
+
+      - name: Install build dependencies
+        run: |
+          git config --system core.longpaths true
+          uv pip install --upgrade build setuptools wheel packaging
+
+      - name: Build wheel
+        run: |
+          $cudaVersion = $env:CUDAVER.Remove($env:CUDAVER.LastIndexOf('.')).Replace('.','')
+          $env:CUDA_HOME = $env:CUDA_PATH
+          $env:CUDA_TOOLKIT_ROOT_DIR = $env:CUDA_PATH
+          $env:VERBOSE = '1'
+
+          # "Basic" CPU baseline (no AVX/AVX2/FMA/F16C) - maximum CPU
+          # compatibility for the fallback path when GPU offload isn't
+          # in play. GPU acceleration (the CUDAARCHVER list above) is
+          # the path that actually matters for this project.
+          $env:CMAKE_ARGS = '-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=' + $env:CUDAARCHVER + ' -DCMAKE_BUILD_PARALLEL_LEVEL=' + $env:MAX_JOBS
+          $env:CMAKE_ARGS = "-DGGML_CUDA_FORCE_MMQ=on -DCUDA_SEPARABLE_COMPILATION=on $env:CMAKE_ARGS"
+          $env:CMAKE_ARGS = "-DENABLE_CCACHE=on -DLLAMA_CURL=off $env:CMAKE_ARGS"
+          $env:CMAKE_ARGS = $env:CMAKE_ARGS + ' -DGGML_NATIVE=off -DGGML_AVX=off -DGGML_AVX2=off -DGGML_AVX_VNNI=off -DGGML_AVX512=off -DGGML_AVX512_VBMI=off -DGGML_AVX512_VNNI=off -DGGML_AVX512_BF16=off -DGGML_FMA=off -DGGML_F16C=off'
+
+          Write-Output "CMAKE_ARGS=$env:CMAKE_ARGS"
+          python -m build --wheel
+
+          if (!(Test-Path '.\dist\*.whl')) {
+            Write-Error "No wheel built in dist/ directory"
+            exit 1
+          }
+
+          $wheelFile = Get-Item '.\dist\*.whl' | Select-Object -First 1
+          $parts = $wheelFile.Name.Split('-')
+          $distName = $parts[0]
+          $version  = $parts[1]
+          $pyTag    = $parts[2]
+          $abiTag   = $parts[3]
+          $platTag  = $parts[4]
+
+          $newVersion = "$version+cu$cudaVersion"
+          $newName = "$distName-$newVersion-$pyTag-$abiTag-$platTag"
+          Rename-Item -Path $wheelFile.FullName -NewName $newName
+          Write-Output "Built: $newName"
+        env:
+          CUDAVER: ${{ env.CUDAVER }}
+          CUDAARCHVER: ${{ env.CUDAARCHVER }}
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/*.whl"
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-win-py${{ matrix.pyver }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------
+  build-linux:
+    name: Build Linux wheel (py${{ matrix.pyver }})
+    runs-on: ubuntu-22.04
+    container: nvidia/cuda:12.8.1-cudnn-devel-ubuntu22.04
+    permissions:
+      id-token: write
+      attestations: write
+    strategy:
+      fail-fast: false
+      matrix:
+        # 3.10 -> native Linux/WSL (install.sh), 3.12 -> container
+        # (Dockerfile's pytorch/pytorch base image system Python).
+        pyver: ["3.10", "3.12"]
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - name: Install build dependencies
+        run: |
+          apt update
+          apt install -y build-essential ccache cmake curl git libgomp1 libjpeg-dev libssl-dev
+
+      - name: Checkout llama-cpp-python (JamePeng fork, pinned commit)
+        uses: actions/checkout@v4
+        with:
+          repository: JamePeng/llama-cpp-python
+          ref: ${{ env.LLAMA_CPP_PYTHON_LINUX_REF }}
+          submodules: recursive
+
+      - name: Install uv and Python ${{ matrix.pyver }}
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-version: ${{ matrix.pyver }}
+          activate-environment: true
+          enable-cache: true
+
+      - name: Show CUDA version
+        run: nvcc -V
+
+      - name: Build wheel
+        env:
+          LD_LIBRARY_PATH: "/usr/local/cuda/lib64:/usr/local/cuda/compat:/usr/lib/x86_64-linux-gnu"
+          VERBOSE: "1"
+          CUDA_HOME: "/usr/local/cuda/"
+          CUDA_TOOLKIT_ROOT_DIR: "/usr/local/cuda/"
+        run: |
+          set -euo pipefail
+
+          CMAKE_ARGS="-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES='${CUDAARCHVER}'"
+          CMAKE_ARGS="-DGGML_CUDA_FORCE_MMQ=on ${CMAKE_ARGS}"
+          CMAKE_ARGS="${CMAKE_ARGS} -DLLAMA_CURL=off -DLLAMA_OPENSSL=on"
+          # "Basic" CPU baseline (no AVX/AVX2/FMA/F16C) - see the matching
+          # comment in the Windows job above.
+          CMAKE_ARGS="${CMAKE_ARGS} -DGGML_NATIVE=off -DGGML_AVX=off -DGGML_AVX2=off -DGGML_AVX_VNNI=off -DGGML_AVX512=off -DGGML_AVX512_VBMI=off -DGGML_AVX512_VNNI=off -DGGML_AVX512_BF16=off -DGGML_FMA=off -DGGML_F16C=off"
+
+          echo "CMAKE_ARGS=${CMAKE_ARGS}"
+          uv pip install --upgrade build setuptools wheel packaging
+          CMAKE_ARGS="${CMAKE_ARGS}" uv build --wheel
+
+          wheel_path=$(ls dist/*.whl | head -n 1)
+          filename=$(basename "$wheel_path")
+          IFS='-' read -r dist_name version py_tag abi_tag plat_tag <<< "$filename"
+          new_filename="${dist_name}-${version}+cu128-${py_tag}-${abi_tag}-${plat_tag}"
+          mv "$wheel_path" "dist/$new_filename"
+          echo "Built: $new_filename"
+        env:
+          CUDAARCHVER: ${{ env.CUDAARCHVER }}
+
+      - name: Attest build provenance
+        uses: actions/attest-build-provenance@v2
+        with:
+          subject-path: "dist/*.whl"
+
+      - name: Upload wheel artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: wheel-linux-py${{ matrix.pyver }}
+          path: dist/*.whl
+          if-no-files-found: error
+
+  # ------------------------------------------------------------------
+  # Collects all 3 wheels into one prerelease (matching this repo's
+  # existing v5.0-deps convention: prerelease, not draft, so it doesn't
+  # interfere with "latest" tagging but is still directly linkable).
+  # ------------------------------------------------------------------
+  publish:
+    name: Publish attested wheels
+    needs: [build-windows, build-linux]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download all wheel artifacts
+        uses: actions/download-artifact@v4
+        with:
+          pattern: wheel-*
+          path: dist
+          merge-multiple: true
+
+      - name: Compute checksums
+        run: |
+          cd dist
+          sha256sum *.whl | tee SHA256SUMS.txt
+
+      - name: Create prerelease
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ inputs.release_tag }}
+          prerelease: true
+          name: "llama-cpp-python 0.3.26+cu128 (attested)"
+          body: |
+            Attested llama-cpp-python 0.3.26 CUDA 12.8 wheels, built from
+            pinned JamePeng/llama-cpp-python commits by
+            `.github/workflows/build-llama-wheels.yml`.
+
+            Each wheel now covers all supported CUDA architectures
+            (Turing through Blackwell) in one universal build - no more
+            separate "standard" vs "Blackwell" variants.
+
+            Verify provenance with:
+            `gh attestation verify <wheel-file> --owner ${{ github.repository_owner }}`
+          files: |
+            dist/*.whl
+            dist/SHA256SUMS.txt
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+#eof

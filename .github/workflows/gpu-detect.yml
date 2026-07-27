@@ -1,14 +1,19 @@
-# FNGarvin - GPU Detection / llama-cpp-python Wheel Selection Regression Suite
+# FNGarvin - Wheel Resolution Regression Suite
 #
-# Guards against the class of bug in issue #13: the installer silently
-# picking the wrong llama-cpp-python wheel for the detected GPU (or, on
-# Windows, cmd.exe's parser crashing outright on certain GPU-branch code).
-# There are three independent detection implementations that can drift:
-#   - Install.bat   (Windows, install-time)
-#   - install.sh    (Linux/WSL, install-time)
-#   - entrypoint.sh (Linux, container boot-time hot-swap)
-# All three are stubbed against a fake nvidia-smi (tests/fixtures) so this
-# runs identically with or without real GPU hardware on the runner.
+# Guards against Install.bat/install.sh crashing on GPU detection - the
+# class of bug in issue #13, where a GPU-branch code path crashed
+# cmd.exe's parser outright.
+#
+# Since the wheel rebuild in docs/BUILD_WHEELS_HOWTO.md, llama-cpp-python
+# wheel selection no longer branches on GPU generation (one universal
+# wheel per platform/Python-version now covers every supported CUDA
+# architecture, Turing through Blackwell), so the old heavy tier here -
+# real installs asserting "did it pick the Blackwell wheel vs the
+# standard one" across a 2-leg GPU matrix - no longer tests anything
+# real and has been removed. What's left is the fast tier: run the
+# --detect-only hook against a stubbed nvidia-smi (tests/fixtures) and
+# confirm it never crashes and always resolves the one correct wheel
+# constant, with or without a GPU present.
 name: GPU Detection Regression
 
 on:
@@ -18,8 +23,6 @@ on:
       - 'Install.bat'
       - 'install.sh'
       - 'entrypoint.sh'
-      - 'Dockerfile'
-      - 'pyproject.toml'
       - 'tests/**'
       - '.github/workflows/gpu-detect.yml'
   pull_request:
@@ -28,8 +31,6 @@ on:
       - 'Install.bat'
       - 'install.sh'
       - 'entrypoint.sh'
-      - 'Dockerfile'
-      - 'pyproject.toml'
       - 'tests/**'
       - '.github/workflows/gpu-detect.yml'
   workflow_dispatch:
@@ -42,17 +43,12 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
-  # ------------------------------------------------------------------
-  # Fast tier: variable-resolution only, no network, no installs.
-  # Covers the full GPU-generation matrix (Blackwell/Hopper/Ada/Turing/
-  # Pascal/no-GPU/garbage-output) in seconds. Runs on every PR.
-  # ------------------------------------------------------------------
   windows-detect-only:
     runs-on: windows-latest
     steps:
       - uses: actions/checkout@v4
       - uses: astral-sh/setup-uv@v5
-      - name: Run GPU detection regression test
+      - name: Run wheel resolution regression test
         shell: cmd
         run: tests\test_gpu_detect.bat
 
@@ -67,172 +63,6 @@ jobs:
         run: chmod +x tests/fixtures/nvidia-smi tests/test_gpu_detect.sh install.sh entrypoint.sh
       - name: Ensure ffmpeg present
         run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
-      - name: Run GPU detection regression test
+      - name: Run wheel resolution regression test
         run: bash tests/test_gpu_detect.sh
-
-  # ------------------------------------------------------------------
-  # Heavier tier: real installs against 2 GPU generations (pre/post
-  # Blackwell), asserting on the actually-installed package versions.
-  # Cheap in practice: the Dockerfile already bakes torch into its base
-  # image and uses buildkit cache mounts for uv; Windows/native-Linux
-  # lean on setup-uv's own cache to avoid re-downloading cu128 torch
-  # every run.
-  # ------------------------------------------------------------------
-  windows-full-install:
-    runs-on: windows-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: standard (Ada, cap 8.9)
-            compute_cap: "8.9"
-            expect_modern: "false"
-          - label: Blackwell (RTX 5090, cap 12.0)
-            compute_cap: "12.0"
-            expect_modern: "true"
-    steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
-
-      # Use the github.workspace *expression* (substituted by the workflow
-      # engine itself, in native Windows path form) rather than shell-native
-      # $PWD - Git Bash's $PWD renders POSIX-style (e.g. /d/a/repo/repo),
-      # and the *next* step runs under cmd.exe, whose executable search
-      # can't resolve a drive-letter-less POSIX path written into PATH.
-      - name: Add fake nvidia-smi to PATH
-        shell: bash
-        run: echo '${{ github.workspace }}/tests/fixtures' >> "$GITHUB_PATH"
-
-      - name: Run full install (${{ matrix.label }})
-        shell: cmd
-        env:
-          FAKE_COMPUTE_CAP: ${{ matrix.compute_cap }}
-        run: Install.bat --no-pause
-
-      - name: Verify installed llama-cpp-python variant matches expectation
-        shell: bash
-        run: |
-          FREEZE=$(.venv/Scripts/python.exe -m pip freeze)
-          LLAMA_LINE=$(echo "$FREEZE" | grep -i llama_cpp_python)
-          echo "Installed: $LLAMA_LINE"
-          if [ "${{ matrix.expect_modern }}" = "true" ]; then
-            echo "$LLAMA_LINE" | grep -q "_Blackwell" || { echo "FAIL: expected the Blackwell wheel, got standard"; exit 1; }
-          else
-            echo "$LLAMA_LINE" | grep -q "_Blackwell" && { echo "FAIL: expected the standard wheel, got Blackwell"; exit 1; }
-          fi
-          echo "$FREEZE" | grep -qx "torch==2.10.0+cu128" || { echo "FAIL: unexpected/missing torch version"; exit 1; }
-          echo "PASS: ${{ matrix.label }}"
-
-  linux-install-sh-native:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: standard (Ada, cap 8.9)
-            compute_cap: "8.9"
-            expect_modern: "false"
-          - label: Blackwell (RTX 5090, cap 12.0)
-            compute_cap: "12.0"
-            expect_modern: "true"
-    steps:
-      - uses: actions/checkout@v4
-      # core.filemode=false on this repo (Windows-authored), so a script's
-      # +x bit isn't reliably preserved through git from a Windows commit.
-      # Don't depend on the checked-out mode being right - force it.
-      - name: Ensure scripts are executable
-        run: chmod +x tests/fixtures/nvidia-smi tests/test_gpu_detect.sh install.sh entrypoint.sh
-      - name: Ensure ffmpeg present
-        run: command -v ffmpeg || (sudo apt-get update && sudo apt-get install -y ffmpeg)
-      - uses: astral-sh/setup-uv@v5
-        with:
-          enable-cache: true
-          cache-dependency-glob: "pyproject.toml"
-
-      - name: Run full install (${{ matrix.label }})
-        env:
-          FAKE_COMPUTE_CAP: ${{ matrix.compute_cap }}
-        run: |
-          export PATH="$PWD/tests/fixtures:$PATH"
-          ./install.sh
-
-      - name: Verify installed llama-cpp-python variant matches expectation
-        run: |
-          FREEZE=$(.venv/bin/python -m pip freeze)
-          LLAMA_LINE=$(echo "$FREEZE" | grep -i llama_cpp_python)
-          echo "Installed: $LLAMA_LINE"
-          if [ "${{ matrix.expect_modern }}" = "true" ]; then
-            echo "$LLAMA_LINE" | grep -q "_Blackwell" || { echo "FAIL: expected the Blackwell wheel, got standard"; exit 1; }
-          else
-            echo "$LLAMA_LINE" | grep -q "_Blackwell" && { echo "FAIL: expected the standard wheel, got Blackwell"; exit 1; }
-          fi
-          echo "$FREEZE" | grep -qx "torch==2.10.0+cu128" || { echo "FAIL: unexpected/missing torch version"; exit 1; }
-          echo "PASS: ${{ matrix.label }}"
-
-  # entrypoint.sh's hot-swap only fires for the modern-GPU branch (the
-  # Dockerfile always builds with the standard wheel baked in, by
-  # design - see the ALERT comment at the top of the Dockerfile); the
-  # standard-GPU leg here exists to guard against a future regression
-  # where it swaps when it shouldn't.
-  linux-docker-entrypoint:
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - label: standard (Ada, cap 8.9)
-            compute_cap: "8.9"
-            expect_modern: "false"
-          - label: Blackwell (RTX 5090, cap 12.0)
-            compute_cap: "12.0"
-            expect_modern: "true"
-    steps:
-      - uses: actions/checkout@v4
-      # core.filemode=false on this repo (Windows-authored), so a script's
-      # +x bit isn't reliably preserved through git from a Windows commit.
-      # Don't depend on the checked-out mode being right - force it.
-      - name: Ensure scripts are executable
-        run: chmod +x tests/fixtures/nvidia-smi entrypoint.sh
-      - uses: docker/setup-buildx-action@v3
-
-      - name: Build image (local cache-only, no push)
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: false
-          load: true
-          tags: gpu-detect-test:latest
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
-
-      - name: Boot container and exercise entrypoint.sh hot-swap (${{ matrix.label }})
-        run: |
-          docker run -d --name gputest --entrypoint sleep gpu-detect-test:latest infinity
-          docker cp tests/fixtures/nvidia-smi gputest:/usr/local/bin/nvidia-smi
-          docker exec gputest chmod +x /usr/local/bin/nvidia-smi
-          echo "--- diagnostics: fake nvidia-smi inside container ---"
-          docker exec gputest ls -la /usr/local/bin/nvidia-smi
-          docker exec gputest sh -c 'command -v nvidia-smi && echo FOUND || echo NOT_FOUND'
-          docker exec -e FAKE_COMPUTE_CAP="${{ matrix.compute_cap }}" gputest nvidia-smi --query-gpu=compute_cap --format=csv,noheader
-          echo "--- running entrypoint.sh ---"
-          docker exec -e CI_DETECT_ONLY=true -e FAKE_COMPUTE_CAP="${{ matrix.compute_cap }}" gputest /workspace/entrypoint.sh
-
-      - name: Verify installed llama-cpp-python variant matches expectation
-        run: |
-          FREEZE=$(docker exec gputest python3 -m pip freeze)
-          LLAMA_LINE=$(echo "$FREEZE" | grep -i llama_cpp_python)
-          echo "Installed: $LLAMA_LINE"
-          if [ "${{ matrix.expect_modern }}" = "true" ]; then
-            echo "$LLAMA_LINE" | grep -q "_Blackwell" || { echo "FAIL: expected the Blackwell wheel, got standard"; exit 1; }
-          else
-            echo "$LLAMA_LINE" | grep -q "_Blackwell" && { echo "FAIL: expected the standard wheel, got Blackwell"; exit 1; }
-          fi
-          echo "PASS: ${{ matrix.label }}"
-
-      - name: Cleanup
-        if: always()
-        run: docker rm -f gputest || true
 #eof

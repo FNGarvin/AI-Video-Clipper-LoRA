@@ -28,50 +28,20 @@ echo "[INFO] Starting SSHD..."
 mkdir -p /run/sshd
 /usr/sbin/sshd
 
-# --- Runtime GPU Optimization (Hot-Swap) ---
+# --- GPU diagnostics ---
+# The llama-cpp-python wheel baked into this image at build time (see
+# docs/BUILD_WHEELS_HOWTO.md) already covers every supported CUDA
+# architecture, Turing through Blackwell, in one universal build - there
+# is no more runtime hot-swap. This is diagnostic-only.
 if command -v nvidia-smi &> /dev/null; then
     COMPUTE_CAP=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -n 1)
     echo "[INFO] Detected NVIDIA GPU Compute Capability: $COMPUTE_CAP"
-    MAJOR_CAP=$(echo "$COMPUTE_CAP" | cut -d'.' -f1)
-
-    # Reject "N/A" or other non-numeric nvidia-smi output before comparing
-    # (bash's -ge throws "integer expression expected" on non-numeric input).
-    if [[ "$MAJOR_CAP" =~ ^[0-9]+$ ]] && [ "$MAJOR_CAP" -ge 9 ]; then
-        echo "[INFO] Modern GPU detected (Hopper/Blackwell). Optimizing AI stack for peak performance..."
-
-        BW_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_Blackwell-cp312-cp312-linux_x86_64.whl"
-        BW_WHEEL_SHA256="89071f3c7452d24c9442677b7b8bed3d2b1d7ef7a3ca8e05580160aa965cb607"
-        # uv parses version/python-tag/platform straight from a local wheel's
-        # filename (PEP 427) - it must keep its real name, not a renamed alias,
-        # or "uv pip install" rejects it with "Must have a version".
-        TEMP_WHEEL="/tmp/$(basename "$BW_WHEEL_URL")"
-
-        echo "[INFO] Downloading Blackwell optimized wheel..."
-        if curl -L -o "$TEMP_WHEEL" "$BW_WHEEL_URL"; then
-             echo "$BW_WHEEL_SHA256  $TEMP_WHEEL" | sha256sum -c -
-             if [ $? -eq 0 ]; then
-                 echo "[INFO] Checksum verified. Hot-swapping llama-cpp-python..."
-                 if uv pip install --system --break-system-packages "$TEMP_WHEEL" --no-deps --force-reinstall; then
-                     echo "[SUCCESS] System optimized for Blackwell/Hopper."
-                 else
-                     echo "[WARNING] Failed to install optimized wheel (system Python may be externally managed). Falling back to standard build."
-                 fi
-             else
-                 echo "[WARNING] Checksum verification failed for optimized wheel. Falling back to standard build."
-             fi
-             rm -f "$TEMP_WHEEL"
-        else
-            echo "[WARNING] Failed to download optimized wheel. Using standard build."
-        fi
-    else
-        echo "[INFO] Standard GPU detected. Running with universal build."
-    fi
 else
     echo "[INFO] No NVIDIA GPU detected via nvidia-smi. Running in CPU/Fallback mode."
 fi
 
-# Test hook: stop right after the hot-swap check above, before Filebrowser
-# and the (long-running, app-serving) exec below. Used by
+# Test hook: stop right after the GPU diagnostics above, before
+# Filebrowser and the (long-running, app-serving) exec below. Used by
 # tests/test_gpu_detect.sh / CI to verify this logic inside a real
 # container against a stubbed nvidia-smi without booting the full app.
 if [ "$CI_DETECT_ONLY" = "true" ]; then

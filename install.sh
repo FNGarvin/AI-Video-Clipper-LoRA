@@ -48,10 +48,17 @@ while [[ "$#" -gt 0 ]]; do
 done
 
 # --------------------------------------------------------------------
-# GPU architecture detection + llama-cpp-python wheel selection.
-# Sets: PY_VER, IS_MODERN_GPU, WHEEL_FILE, LINUX_WHEEL_URL, LINUX_WHEEL_SHA256
+# llama-cpp-python wheel resolution.
+#
+# As of the wheel rebuild in docs/BUILD_WHEELS_HOWTO.md, a single wheel
+# per Python version covers every supported CUDA architecture (Turing
+# through Blackwell) - there is no more per-GPU-family branching here.
+# The compute-cap probe below is diagnostic-only (printed for
+# troubleshooting) and does not affect which wheel gets fetched.
+#
+# Sets: PY_VER, WHEEL_FILE, LINUX_WHEEL_URL, LINUX_WHEEL_SHA256
 # --------------------------------------------------------------------
-detect_gpu_wheel() {
+resolve_wheel() {
     if [ "$USE_SYSTEM" = true ] || [ ! -x ".venv/bin/python" ]; then
         PY_VER=$(python3 -c "import sys; print(f'{sys.version_info.major}.{sys.version_info.minor}')")
     else
@@ -59,37 +66,18 @@ detect_gpu_wheel() {
     fi
     echo "[INFO] Detected Python Version: $PY_VER"
 
-    IS_MODERN_GPU=false
     if command -v nvidia-smi &> /dev/null; then
         COMPUTE_CAP=$(nvidia-smi --query-gpu=compute_cap --format=csv,noheader | head -n 1)
         echo "[INFO] Detected NVIDIA GPU Compute Capability: $COMPUTE_CAP"
-        MAJOR_CAP=$(echo "$COMPUTE_CAP" | cut -d'.' -f1)
-        # Reject "N/A" or other non-numeric nvidia-smi output before comparing
-        # (bash's -ge throws "integer expression expected" on non-numeric input).
-        if [[ "$MAJOR_CAP" =~ ^[0-9]+$ ]] && [ "$MAJOR_CAP" -ge 9 ]; then
-            echo "[INFO] Modern GPU detected (Hopper/Blackwell). Selecting optimized Sm90+ wheel."
-            IS_MODERN_GPU=true
-        else
-            echo "[INFO] Legacy GPU detected. Selecting standard AVX2/No-AVX512 wheel."
-        fi
-    else
-        echo "[WARNING] nvidia-smi not found. Falling back to standard universal wheel."
     fi
 
     if [ "$PY_VER" == "3.10" ]; then
-        if [ "$IS_MODERN_GPU" = true ]; then
-            LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128_Blackwell-cp310-cp310-linux_x86_64.whl"
-            LINUX_WHEEL_SHA256="23d611360d950d4f60f204c43a673b8468b7720b97f44746c1ab106b0d85f7a2"
-            WHEEL_FILE="llama_cpp_python-0.3.26+cu128_Blackwell-cp310-cp310-linux_x86_64.whl"
-        else
-            LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128-cp310-cp310-linux_x86_64.whl"
-            LINUX_WHEEL_SHA256="2b62db61d1b2e1b2066fbb99e35d0604fe4930fd1bbfbe1ef86d6cb145ee4bae"
-            WHEEL_FILE="llama_cpp_python-0.3.26+cu128-cp310-cp310-linux_x86_64.whl"
-        fi
+        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.1-llama-deps/llama_cpp_python-0.3.26+cu128-cp310-cp310-linux_x86_64.whl"
+        LINUX_WHEEL_SHA256="PLACEHOLDER_SHA256_UPDATE_AFTER_BUILD"
+        WHEEL_FILE="llama_cpp_python-0.3.26+cu128-cp310-cp310-linux_x86_64.whl"
     elif [ "$PY_VER" == "3.12" ]; then
-        # Provided by FNGarvin for Runner - AVX2 Universal Build
-        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.0-deps/llama_cpp_python-0.3.26+cu128-cp312-cp312-linux_x86_64.whl"
-        LINUX_WHEEL_SHA256="b3b7037ff784278f0c4c868c7ff28fdbb22dc9dfe6f91b7e79f530025ad037e2"
+        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.1-llama-deps/llama_cpp_python-0.3.26+cu128-cp312-cp312-linux_x86_64.whl"
+        LINUX_WHEEL_SHA256="PLACEHOLDER_SHA256_UPDATE_AFTER_BUILD"
         WHEEL_FILE="llama_cpp_python-0.3.26+cu128-cp312-cp312-linux_x86_64.whl"
     else
         echo "[ERROR] Unsupported Python Version for GPU Acceleration: $PY_VER. Only 3.10 and 3.12 supported."
@@ -98,13 +86,12 @@ detect_gpu_wheel() {
     fi
 }
 
-# Test hook: resolve GPU/wheel selection and exit immediately, before
+# Test hook: resolve the wheel to fetch and exit immediately, before
 # touching ffmpeg/uv checks, the venv, network, or any installs. Used by
-# tests/test_gpu_detect.sh to verify the detection logic in isolation
-# against a stubbed nvidia-smi.
+# tests/test_gpu_detect.sh to verify this doesn't crash regardless of
+# GPU presence.
 if [ "$DETECT_ONLY" = true ]; then
-    detect_gpu_wheel
-    echo "[DETECT-ONLY] IS_MODERN_GPU=$IS_MODERN_GPU"
+    resolve_wheel
     echo "[DETECT-ONLY] PY_VER=$PY_VER"
     echo "[DETECT-ONLY] WHEEL_FILE=$WHEEL_FILE"
     echo "[DETECT-ONLY] LINUX_WHEEL_URL=$LINUX_WHEEL_URL"
@@ -161,7 +148,7 @@ uv pip install $INSTALL_ARGS \
     "git+https://github.com/m-bain/whisperX.git@6ec4a020489d904c4f2cd1ed097674232d2692d4" --no-deps
 
 echo "[INFO] Syncing GGUF High-Performance Backend (CUDA 12.8)..."
-detect_gpu_wheel
+resolve_wheel
 
 echo "[INFO] Downloading wheel for verification..."
 curl -L -o "$WHEEL_FILE" "$LINUX_WHEEL_URL"

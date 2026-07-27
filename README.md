@@ -134,6 +134,7 @@ We have completely rewritten the core engine to support multi-modal understandin
 * **[Cyberbol](https://github.com/cyberbol):** Original Creator & Logic Architect.
 * **[FNGarvin](https://github.com/FNGarvin):** Engine Architect (Back-end Systems).
 * **[WildSpeaker7315](https://www.reddit.com/user/WildSpeaker7315/):** He owns a 5090!
+* **[JamePeng](https://github.com/JamePeng/llama-cpp-python):** For providing llama-cpp-python workflows and updates and for the latest models.
 
 ---
 <div align="center">
