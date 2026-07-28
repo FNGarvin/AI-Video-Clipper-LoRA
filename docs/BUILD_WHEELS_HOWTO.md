@@ -48,8 +48,14 @@ needs, on demand (`workflow_dispatch` only - it never runs automatically):
 
 To run it:
 ```powershell
-gh workflow run build-llama-wheels.yml -f release_tag=v5.1-llama-deps
+gh workflow run build-llama-wheels.yml -f release_tag=v5.3-llama-deps
 ```
+
+(The first real run of this workflow published `v5.3-llama-deps` - all 3 wheels
+built successfully; the Linux legs finished in ~1-1.5h each, the Windows leg
+took ~3.5h, most likely because the pinned recipe below doesn't force the
+Ninja generator on Windows and falls back to MSBuild. Slow, but correct, and
+comfortably inside GitHub's 6-hour job timeout.)
 Each wheel gets a [SLSA build provenance
 attestation](https://docs.github.com/actions/security-for-github-actions/using-artifact-attestations)
 via `actions/attest-build-provenance`, binding it to the exact workflow run
@@ -94,9 +100,11 @@ newer recipe isn't guaranteed to apply cleanly to an older pinned commit).
 
 ### After a run completes
 
-Download the new wheels' SHA256 hashes from the release (or `SHA256SUMS.txt`)
-and update the pinned URLs/hashes in `Install.bat`, `install.sh`, and
-`entrypoint.sh`.
+Download the new wheels' SHA256 hashes from the release's `SHA256SUMS.txt`
+(don't hand-transcribe them off scrolling/truncated log output - it's easy to
+mistype a hex digit) and update the pinned URLs/hashes in `Install.bat` and
+`install.sh`. `entrypoint.sh` no longer references a wheel at all - the
+image's baked-in wheel already covers every architecture.
 
 ---
 
@@ -164,7 +172,8 @@ python -m build --wheel
 1. Trigger `build-llama-wheels.yml` (or build manually per above).
 2. Verify the wheels' attestations (`gh attestation verify ...`) and, ideally,
    smoke-test the Blackwell path on real Blackwell hardware before trusting it.
-3. Update the pinned URLs/SHA256 hashes in `Install.bat`, `install.sh`, and
-   `entrypoint.sh` to point at the new release assets.
+3. Update the pinned URLs/SHA256 hashes in `Install.bat` and `install.sh` to
+   point at the new release assets (copy hashes straight from the release's
+   `SHA256SUMS.txt`, not from log output).
 
 // END OF BUILD_WHEELS_HOWTO.md

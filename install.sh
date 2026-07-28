@@ -72,12 +72,12 @@ resolve_wheel() {
     fi
 
     if [ "$PY_VER" == "3.10" ]; then
-        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.1-llama-deps/llama_cpp_python-0.3.26+cu128-cp310-cp310-linux_x86_64.whl"
-        LINUX_WHEEL_SHA256="PLACEHOLDER_SHA256_UPDATE_AFTER_BUILD"
+        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.3-llama-deps/llama_cpp_python-0.3.26+cu128-cp310-cp310-linux_x86_64.whl"
+        LINUX_WHEEL_SHA256="821cc8244f36a9595b465aa51d109ab3b24e1b8fd911a655678786365f4be65b"
         WHEEL_FILE="llama_cpp_python-0.3.26+cu128-cp310-cp310-linux_x86_64.whl"
     elif [ "$PY_VER" == "3.12" ]; then
-        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.1-llama-deps/llama_cpp_python-0.3.26+cu128-cp312-cp312-linux_x86_64.whl"
-        LINUX_WHEEL_SHA256="PLACEHOLDER_SHA256_UPDATE_AFTER_BUILD"
+        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.3-llama-deps/llama_cpp_python-0.3.26+cu128-cp312-cp312-linux_x86_64.whl"
+        LINUX_WHEEL_SHA256="86f0b0e6b010b38c0316e296b871e622c2b154e20d737b0c528d8dd17aa4e303"
         WHEEL_FILE="llama_cpp_python-0.3.26+cu128-cp312-cp312-linux_x86_64.whl"
     else
         echo "[ERROR] Unsupported Python Version for GPU Acceleration: $PY_VER. Only 3.10 and 3.12 supported."

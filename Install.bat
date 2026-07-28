@@ -246,8 +246,8 @@ exit /b 0
 :: Sets: WHEEL_FILE, WIN_WHEEL_URL, WIN_WHEEL_SHA256
 :: --------------------------------------------------------------------
 :resolve_wheel
-set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.1-llama-deps/llama_cpp_python-0.3.26+cu128-cp310-cp310-win_amd64.whl"
-set "WIN_WHEEL_SHA256=PLACEHOLDER_SHA256_UPDATE_AFTER_BUILD"
+set "WIN_WHEEL_URL=https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.3-llama-deps/llama_cpp_python-0.3.26+cu128-cp310-cp310-win_amd64.whl"
+set "WIN_WHEEL_SHA256=f3e8512dd6e80f847189420bdeba657cc45d38d42cf025e2bababaa9f5188013"
 set "WHEEL_FILE=llama_cpp_python-0.3.26+cu128-cp310-cp310-win_amd64.whl"
 
 set "MAJOR_CAP="

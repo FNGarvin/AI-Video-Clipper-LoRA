@@ -40,7 +40,7 @@ on:
       release_tag:
         description: "Tag for the release these wheels get published under"
         required: true
-        default: "v5.1-llama-deps"
+        default: "v5.3-llama-deps"
 
 permissions:
   contents: read
