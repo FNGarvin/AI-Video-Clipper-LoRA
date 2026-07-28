@@ -113,7 +113,13 @@ else
     fi
 
     if [ ! -d ".venv" ]; then
-        uv venv .venv --python 3.10 --seed --managed-python --link-mode hardlink
+        # --managed-python doesn't exist on uv 0.5.21 (what this bootstrap
+        # leaves in place when uv is already on PATH, e.g. inside the
+        # container image). --python-preference only-managed is the 0.5.21
+        # equivalent: forces uv's own downloaded interpreter so the venv
+        # matches our pinned llama-cpp-python wheel ABI and never touches
+        # whatever Python happens to already be on the user's system.
+        uv venv .venv --python 3.10 --seed --python-preference only-managed --link-mode hardlink
     fi
     source .venv/bin/activate
 fi
