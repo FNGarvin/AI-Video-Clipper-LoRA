@@ -16,8 +16,17 @@ import tempfile
 
 # --- Lazy Imports for Heavy Libraries ---
 try:
-    from llama_cpp import Llama
-    from llama_cpp.llama_chat_format import Llava15ChatHandler
+    # llama_cpp prints "optional API unavailable" warnings via a bare print()
+    # (not the logging module, so no verbosity flag reaches it) for every
+    # ctypes symbol lookup that misses on this platform - fires once, here,
+    # at import time. Redirecting stdout is the only way to suppress it;
+    # ImportError still propagates normally since redirect_stdout doesn't
+    # swallow exceptions.
+    import contextlib
+    import io
+    with contextlib.redirect_stdout(io.StringIO()):
+        from llama_cpp import Llama
+        from llama_cpp.llama_chat_format import Llava15ChatHandler
 except ImportError:
     Llama = None
     Llava15ChatHandler = None

@@ -16,6 +16,13 @@ except ImportError:
     # Basic fallbacks if patches.py is missing
     pass
 
+# Silence transformers' lazy-module __path__ deprecation spam (fires on every
+# vision/audio model load, once per deprecated image-processor alias - has to
+# be set before transformers gets imported anywhere else, including
+# transitively via whisperx/pyannote).
+import transformers
+transformers.utils.logging.set_verbosity_error()
+
 import streamlit as st
 import whisperx
 from moviepy import VideoFileClip, AudioFileClip
