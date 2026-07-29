@@ -144,13 +144,20 @@ class GGUFVisionEngine:
         else:
             self.chat_handler = None
 
-        self.llm = Llama(
-            model_path=m_path,
-            chat_handler=self.chat_handler,
-            n_ctx=self.n_ctx,  # Configurable
-            n_gpu_layers=self.n_gpu_layers, # Configurable
-            verbose=False    # Keep checking stdout clean
-        )
+        try:
+            self.llm = Llama(
+                model_path=m_path,
+                chat_handler=self.chat_handler,
+                n_ctx=self.n_ctx,  # Configurable
+                n_gpu_layers=self.n_gpu_layers, # Configurable
+                verbose=False    # Keep checking stdout clean
+            )
+        except Exception as e:
+            if log_callback: log_callback(f"❌ Load Failed: {e}")
+            self.llm = None
+            self.chat_handler = None
+            gc.collect()
+            raise RuntimeError(f"Failed to load {self.model_file}: {e}") from None
         if log_callback: log_callback("✅ GGUF Engine Ready.")
 
     def caption(self, content_path, content_type, trigger, instruction, gen_config=None, stream_callback=None):
@@ -291,7 +298,15 @@ class TransformersVisionEngine:
             if log_callback: log_callback("✅ Transformers Engine Ready.")
         except Exception as e:
             if log_callback: log_callback(f"❌ Load Failed: {e}")
-            raise e
+            # Re-raising `e` directly would keep its original traceback alive,
+            # which pins every GPU tensor from_pretrained had already loaded
+            # before the failure - leaving VRAM stuck until the whole process
+            # exits. Raise a fresh exception instead so cleanup actually frees it.
+            self.model = None
+            self.processor = None
+            gc.collect()
+            torch.cuda.empty_cache()
+            raise RuntimeError(f"Failed to load {self.model_id}: {e}") from None
 
     def caption(self, content_path, content_type, trigger, instruction, gen_config=None, stream_callback=None):
         if not self.model: raise RuntimeError("Engine not loaded.")
