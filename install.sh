@@ -72,13 +72,13 @@ resolve_wheel() {
     fi
 
     if [ "$PY_VER" == "3.10" ]; then
-        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.3-llama-deps/llama_cpp_python-0.3.26+cu128-cp310-cp310-linux_x86_64.whl"
-        LINUX_WHEEL_SHA256="821cc8244f36a9595b465aa51d109ab3b24e1b8fd911a655678786365f4be65b"
-        WHEEL_FILE="llama_cpp_python-0.3.26+cu128-cp310-cp310-linux_x86_64.whl"
+        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.4-llama-deps/llama_cpp_python-0.3.44+cu128-cp310-cp310-linux_x86_64.whl"
+        LINUX_WHEEL_SHA256="6cf11a799a54b29aebc2f3d4a436d61844516a475045c130fee74814852f075f"
+        WHEEL_FILE="llama_cpp_python-0.3.44+cu128-cp310-cp310-linux_x86_64.whl"
     elif [ "$PY_VER" == "3.12" ]; then
-        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.3-llama-deps/llama_cpp_python-0.3.26+cu128-cp312-cp312-linux_x86_64.whl"
-        LINUX_WHEEL_SHA256="86f0b0e6b010b38c0316e296b871e622c2b154e20d737b0c528d8dd17aa4e303"
-        WHEEL_FILE="llama_cpp_python-0.3.26+cu128-cp312-cp312-linux_x86_64.whl"
+        LINUX_WHEEL_URL="https://github.com/cyberbol/AI-Video-Clipper-LoRA/releases/download/v5.4-llama-deps/llama_cpp_python-0.3.44+cu128-cp312-cp312-linux_x86_64.whl"
+        LINUX_WHEEL_SHA256="baec17ea25494ab79c998befba14a2f5960c17838dc27453d7c10b1da222f6fa"
+        WHEEL_FILE="llama_cpp_python-0.3.44+cu128-cp312-cp312-linux_x86_64.whl"
     else
         echo "[ERROR] Unsupported Python Version for GPU Acceleration: $PY_VER. Only 3.10 and 3.12 supported."
         # Fail hard to prevent broken installs
@@ -211,10 +211,25 @@ if [ "$SKIP_GPU_CHECK" != "true" ]; then
         fi
     fi
 
+    # llama_supports_gpu_offload() checks a static build-time flag that no
+    # longer means anything on GGML_BACKEND_DL wheels (CUDA ships as a
+    # separate dynamically-loaded backend, not compiled into libllama.so) -
+    # it reports False unconditionally regardless of whether CUDA actually
+    # loads. Load the backends the same way Llama.__init__ does and check
+    # for a real GPU device instead.
+    GPU_CHECK_PY="
+import ctypes
+from pathlib import Path
+import llama_cpp.llama_cpp as llama_cpp_lib
+from llama_cpp._ggml import ggml_backend_load_all_from_path, ggml_backend_dev_by_type
+lib_dir = Path(llama_cpp_lib.__file__).resolve().parent / 'lib'
+ggml_backend_load_all_from_path(ctypes.c_char_p(str(lib_dir).encode('utf-8')))
+print(f'>>> GPU Offload Supported: {bool(ggml_backend_dev_by_type(1))}')
+"
     if [ "$USE_SYSTEM" = true ]; then
-        python3 -c "from llama_cpp import llama_supports_gpu_offload; print(f'>>> GPU Offload Supported: {llama_supports_gpu_offload()}')" || echo "WARNING: Llama check failed"
+        python3 -c "$GPU_CHECK_PY" || echo "WARNING: Llama check failed"
     else
-        .venv/bin/python -c "from llama_cpp import llama_supports_gpu_offload; print(f'>>> GPU Offload Supported: {llama_supports_gpu_offload()}')" || echo "WARNING: Llama check failed"
+        .venv/bin/python -c "$GPU_CHECK_PY" || echo "WARNING: Llama check failed"
     fi
 else
     echo "[INFO] Skipping GPU Verification (Build Mode)"
