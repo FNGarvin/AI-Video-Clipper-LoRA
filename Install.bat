@@ -90,11 +90,11 @@ if "%RESET_VENV%"=="true" (
 )
 
 if not exist ".venv" (
-    :: --managed-python doesn't exist on uv 0.5.21 (what this bootstrap
-    :: leaves in place when uv is already on PATH). --python-preference
-    :: only-managed is the 0.5.21 equivalent: forces uv's own downloaded
-    :: interpreter so the venv matches our pinned llama-cpp-python wheel
-    :: ABI and never touches whatever Python is already on the user's system.
+    REM --managed-python doesn't exist on uv 0.5.21 (what this bootstrap
+    REM leaves in place when uv is already on PATH). --python-preference
+    REM only-managed is the 0.5.21 equivalent: forces uv's own downloaded
+    REM interpreter so the venv matches our pinned llama-cpp-python wheel
+    REM ABI and never touches whatever Python is already on the user's system.
     uv venv .venv --python 3.10 --seed --python-preference only-managed --link-mode hardlink
 )
 
