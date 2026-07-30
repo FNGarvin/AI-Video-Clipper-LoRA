@@ -231,7 +231,7 @@ def select_folder_dialog():
     return folder_path
 
 # =================================================================================================
-# MODE 1: VIDEO AUTO-CLIPPER (v5.0 Merged Logic)
+# MODE 1: VIDEO AUTO-CLIPPER
 # =================================================================================================
 if app_mode == "🎥 Video Auto-Clipper":
     project_name = st.text_input("Project Name (Optional)", value="")

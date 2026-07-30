@@ -1,6 +1,6 @@
 @echo off
 setlocal EnableDelayedExpansion
-:: AI Video Clipper & LoRA Captioner - Windows Installer (v5.0 Staging)
+:: AI Video Clipper & LoRA Captioner - Windows Installer (v5.4)
 
 TITLE AI Clipper Installer - UV Edition
 color 0B
