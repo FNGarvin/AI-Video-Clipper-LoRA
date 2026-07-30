@@ -226,10 +226,23 @@ lib_dir = Path(llama_cpp_lib.__file__).resolve().parent / 'lib'
 ggml_backend_load_all_from_path(ctypes.c_char_p(str(lib_dir).encode('utf-8')))
 print(f'>>> GPU Offload Supported: {bool(ggml_backend_dev_by_type(1))}')
 "
+    # llama_cpp prints a wall of native "loaded library from ..." /
+    # "optional API unavailable" / ggml backend-init noise on every fresh
+    # process (see modules/vision_engine.py for the equivalent runtime fix) -
+    # this is a one-shot subprocess so that fix doesn't reach it. Capture
+    # everything and surface only the one line we actually care about;
+    # dump the full output if that line is missing (real failure).
     if [ "$USE_SYSTEM" = true ]; then
-        python3 -c "$GPU_CHECK_PY" || echo "WARNING: Llama check failed"
+        GPU_CHECK_OUTPUT=$(python3 -c "$GPU_CHECK_PY" 2>&1)
     else
-        .venv/bin/python -c "$GPU_CHECK_PY" || echo "WARNING: Llama check failed"
+        GPU_CHECK_OUTPUT=$(.venv/bin/python -c "$GPU_CHECK_PY" 2>&1)
+    fi
+    GPU_CHECK_RESULT=$(echo "$GPU_CHECK_OUTPUT" | grep ">>> GPU Offload Supported:")
+    if [ -n "$GPU_CHECK_RESULT" ]; then
+        echo "$GPU_CHECK_RESULT"
+    else
+        echo "WARNING: Llama GPU check failed to run"
+        echo "$GPU_CHECK_OUTPUT"
     fi
 else
     echo "[INFO] Skipping GPU Verification (Build Mode)"

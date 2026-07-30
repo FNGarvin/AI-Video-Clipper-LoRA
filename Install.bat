@@ -226,7 +226,21 @@ echo [CHECK] Verifying GPU Acceleration...
 :: reports False unconditionally regardless of whether CUDA actually loads.
 :: Load the backends the same way Llama.__init__ does and check for a real
 :: GPU device instead.
-call .venv\Scripts\python -c "import ctypes; from pathlib import Path; import llama_cpp.llama_cpp as llama_cpp_lib; from llama_cpp._ggml import ggml_backend_load_all_from_path, ggml_backend_dev_by_type; lib_dir = Path(llama_cpp_lib.__file__).resolve().parent / 'lib'; ggml_backend_load_all_from_path(ctypes.c_char_p(str(lib_dir).encode('utf-8'))); print(f'>>> GPU Offload Supported: {bool(ggml_backend_dev_by_type(1))}')"
+::
+:: llama_cpp prints a wall of native "loaded library from ..." / "optional
+:: API unavailable" / ggml backend-init noise on every fresh process. Send
+:: it to a log file and only surface the one result line; dump the full
+:: log if that line is missing (real failure). Avoids piping the quote-heavy
+:: python -c string through a nested for /f command (the exact class of
+:: cmd.exe parser fragility that caused issue #13).
+set "GPU_CHECK_LOG=%TEMP%\avc_gpu_check_%RANDOM%.log"
+call .venv\Scripts\python -c "import ctypes; from pathlib import Path; import llama_cpp.llama_cpp as llama_cpp_lib; from llama_cpp._ggml import ggml_backend_load_all_from_path, ggml_backend_dev_by_type; lib_dir = Path(llama_cpp_lib.__file__).resolve().parent / 'lib'; ggml_backend_load_all_from_path(ctypes.c_char_p(str(lib_dir).encode('utf-8'))); print(f'>>> GPU Offload Supported: {bool(ggml_backend_dev_by_type(1))}')" > "%GPU_CHECK_LOG%" 2>&1
+findstr /C:">>> GPU Offload Supported:" "%GPU_CHECK_LOG%"
+if errorlevel 1 (
+    echo WARNING: Llama GPU check failed to run
+    type "%GPU_CHECK_LOG%"
+)
+del "%GPU_CHECK_LOG%" >nul 2>&1
 
 echo.
 echo ======================================================================

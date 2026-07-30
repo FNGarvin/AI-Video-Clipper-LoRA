@@ -1,5 +1,5 @@
 # --------------------------------------------------------------------------------
-# AI Video Clipper & LoRA Captioner (v5.0 Staging)
+# AI Video Clipper & LoRA Captioner (v5.4)
 # 🏆 CREDITS: Cyberbol (Logic), FNGarvin (Engine), WildSpeaker (5090 Fix)
 # --------------------------------------------------------------------------------
 
@@ -66,9 +66,9 @@ os.makedirs(MODELS_DIR, exist_ok=True)
 os.environ["HF_HOME"] = MODELS_DIR
 
 # --- 3. UI CONFIG ---
-st.set_page_config(page_title="AI Clipper v5.0", layout="wide")
+st.set_page_config(page_title="AI Clipper v5.4", layout="wide")
 st.title("👁️🐧👂 AI Video Clipper & LoRA Captioner")
-st.markdown("v5.0 | **[Cyberbol](https://github.com/cyberbol/)** (Project Creator) | **[FNG](https://github.com/FNGarvin/)** (Engine) | **WildSpeaker** (Has a 5090!)")
+st.markdown("v5.4 | **[Cyberbol](https://github.com/cyberbol/)** (Project Creator) | **[FNG](https://github.com/FNGarvin/)** (Engine) | **WildSpeaker** (Has a 5090!)")
 
 device = "cuda" if torch.cuda.is_available() else "cpu"
 
@@ -86,38 +86,53 @@ app_mode = st.sidebar.selectbox("Choose Mode:", [
 ])
 
 # --- MODEL SELECTION (Radio Buttons) ---
-model_options = {
-    "GGUF: Gemma-3-12B (Next-Gen, 4-bit)": {
+# Dict insertion order = dropdown order (Python dicts + Streamlit selectbox
+# both preserve it), so the hardcoded entries are split around the
+# auto-discovery block below to land newly-scanned local models between
+# Gemma 4 and Qwen3-VL rather than at the end.
+KNOWN_GGUF_MODELS = {
+    "Gemma 4 12B (Q5_K_XL)": {
         "backend": "gguf",
-        "repo": "unsloth/gemma-3-12b-it-GGUF",
-        "model": "gemma-3-12b-it-IQ4_XS.gguf",
+        "repo": "unsloth/gemma-4-12b-it-GGUF",
+        "model": "gemma-4-12b-it-UD-Q5_K_XL.gguf",
         "projector": "mmproj-F16.gguf"
     },
-    "GGUF: Qwen3-VL-8B-Instruct (Q4_K_M)": {
+    "Qwen3-VL 8B Instruct (Q4_K_M)": {
         "backend": "gguf",
         "repo": "Qwen/Qwen3-VL-8B-Instruct-GGUF",
         "model": "Qwen3VL-8B-Instruct-Q4_K_M.gguf",
         "projector": "mmproj-Qwen3VL-8B-Instruct-Q8_0.gguf"
     },
-    "Transformer: Qwen2-VL-7B (High Quality)": {
-        "backend": "transformers",
-        "id": "Qwen/Qwen2-VL-7B-Instruct"
+    "Gemma 3 12B (4-bit)": {
+        "backend": "gguf",
+        "repo": "unsloth/gemma-3-12b-it-GGUF",
+        "model": "gemma-3-12b-it-IQ4_XS.gguf",
+        "projector": "mmproj-F16.gguf"
     },
-    "Transformer: Qwen2-VL-2B (Fast)": {
-        "backend": "transformers",
-        "id": "Qwen/Qwen2-VL-2B-Instruct"
-    }
 }
+
+model_options = {"Gemma 4 12B (Q5_K_XL)": KNOWN_GGUF_MODELS["Gemma 4 12B (Q5_K_XL)"]}
 
 # Auto-Discovery
 local_ggufs = scan_local_gguf_models(MODELS_DIR)
 # Filter duplicates
-existing_ggufs = [m["model"] for m in model_options.values() if m.get("backend") == "gguf"]
+existing_ggufs = [m["model"] for m in KNOWN_GGUF_MODELS.values()]
 for label, config in local_ggufs.items():
     if config["model"] not in existing_ggufs:
         model_options[label] = config
 
-model_label = st.sidebar.selectbox("Vision Model:", list(model_options.keys()), index=2)
+model_options["Qwen3-VL 8B Instruct (Q4_K_M)"] = KNOWN_GGUF_MODELS["Qwen3-VL 8B Instruct (Q4_K_M)"]
+model_options["Gemma 3 12B (4-bit)"] = KNOWN_GGUF_MODELS["Gemma 3 12B (4-bit)"]
+model_options["Qwen2-VL 2B (Fast)"] = {
+    "backend": "transformers",
+    "id": "Qwen/Qwen2-VL-2B-Instruct"
+}
+model_options["Qwen2-VL 7B (High Quality)"] = {
+    "backend": "transformers",
+    "id": "Qwen/Qwen2-VL-7B-Instruct"
+}
+
+model_label = st.sidebar.selectbox("Vision Model:", list(model_options.keys()), index=0)
 SELECTED_MODEL = model_options[model_label]
 SELECTED_VISION_ID = SELECTED_MODEL.get("id", SELECTED_MODEL.get("model")) # Fallback ID
 
@@ -404,7 +419,7 @@ if app_mode == "🎥 Video Auto-Clipper":
 
             video_f.close(); 
             clear_vram()
-            st.success("✅ DONE! v5.0 Pipeline Finished.")
+            st.success("✅ DONE! v5.4 Pipeline Finished.")
             end_ts = time.time(); mins, secs = divmod(end_ts - start_ts, 60)
             timer_placeholder.success(f"⏱️ Total Time: {int(mins)}m {int(secs)}s")
 
@@ -645,10 +660,6 @@ else:
         finally:
             if temp_img_dir and os.path.exists(temp_img_dir):
                 shutil.rmtree(temp_img_dir)
-
-st.markdown("---")
-st.markdown("<div style='text-align: center'><a href='https://github.com/cyberbol/AI-Video-Clipper-LoRA'>An Open Source Project</a></div>", unsafe_allow_html=True)
-
 
 st.markdown("---")
 st.markdown("<div style='text-align: center'><a href='https://github.com/cyberbol/AI-Video-Clipper-LoRA'>An Open Source Project</a></div>", unsafe_allow_html=True)
