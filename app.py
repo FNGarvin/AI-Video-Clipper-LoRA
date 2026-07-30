@@ -38,6 +38,7 @@ except ImportError:
     HAS_TKINTER = False
 import logging
 import shutil
+import subprocess
 
 # Suppress Streamlit's "missing ScriptRunContext" warning in threads
 logging.getLogger("streamlit.runtime.scriptrunner_utils.script_run_context").setLevel(logging.ERROR)
@@ -171,6 +172,21 @@ def clear_vram():
     gc.collect()
     torch.cuda.empty_cache()
 
+def log_vram(label):
+    """Diagnostic: actual GPU-wide VRAM in use per nvidia-smi, not just
+    what torch.cuda tracks - catches non-PyTorch allocations (llama.cpp's
+    own CUDA buffers, CTranslate2, etc.) that torch's own counters miss."""
+    try:
+        nvidia_smi = shutil.which("nvidia-smi") or "/usr/lib/wsl/lib/nvidia-smi"
+        out = subprocess.check_output(
+            [nvidia_smi, "--query-gpu=memory.used,memory.total", "--format=csv,noheader,nounits"],
+            timeout=5,
+        )
+        used, total = out.decode().strip().split(", ")
+        print(f"🩺 VRAM [{label}]: {used}MiB / {total}MiB used (GPU-wide)")
+    except Exception as e:
+        print(f"🩺 VRAM [{label}]: readout failed ({e})")
+
 # --- 5. MODEL LOADERS (MODULARIZED) ---
 def load_vision_engine():
     """Unified loading using VisionEngine class"""
@@ -268,6 +284,7 @@ if app_mode == "🎥 Video Auto-Clipper":
             if 'audio_engine' in st.session_state and st.session_state['audio_engine']:
                 st.session_state['audio_engine'].clear()
             clear_vram()
+            log_vram("after Phase 0 clean slate")
 
             # === PHASE 1: WHISPER X ===
             print(f"\n🚀 [Phase 1] Speech Analysis (WhisperX) started on {video_path}...")
@@ -336,6 +353,7 @@ if app_mode == "🎥 Video Auto-Clipper":
                 with st.spinner("Ensuring Audio Model (Downloader Active)..."):
                     download_model(SELECTED_AUDIO_ID, MODELS_DIR, log_callback=status_box.text)
 
+                log_vram("before Audio Engine load")
                 a_engine = load_audio_engine()
                 # Ensure loaded
                 if not a_engine.model:

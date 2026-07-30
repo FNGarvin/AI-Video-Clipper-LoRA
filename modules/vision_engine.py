@@ -440,8 +440,9 @@ class TransformersVisionEngine:
             full_text = ""
             for new_text in streamer:
                 full_text += new_text
-                stream_callback(self._post_process(full_text, trigger))
-            
+                # Stream raw accumulated text; only post-process once at the end
+                stream_callback(full_text)
+
             thread.join()
             return self._post_process(full_text, trigger)
         else:
