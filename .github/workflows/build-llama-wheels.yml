@@ -19,13 +19,31 @@
 # whole bug class structurally impossible: there is nothing to
 # auto-detect, and the arch list is spelled out right here.
 #
-# Source is pinned to immutable commit SHAs on the JamePeng fork (not a
-# branch or tag) - the exact commits JamePeng themselves tagged as the
-# v0.3.26 cu128 release for each platform - so this is NOT an upgrade,
-# just a re-build of the same version with a correct, explicit, fully
-# attested build process. See docs/BUILD_WHEELS_HOWTO.md for how these
-# commits were identified and how to bump them if a real upgrade is
-# ever wanted.
+# Source is pinned to an immutable commit SHA on the JamePeng fork (not a
+# branch or tag) - the exact commit JamePeng themselves tagged as the
+# v0.3.44 cu128 release (same commit for both platforms this time). See
+# docs/BUILD_WHEELS_HOWTO.md for how this was identified and how to bump
+# it again if a future upgrade is wanted.
+#
+# v0.3.44 was picked up specifically to get current Gemma 4 (Gemma4ChatHandler,
+# landed v0.3.35/v0.3.36) and Qwen3.5/Qwen3.6/Qwen3-Next support (v0.3.36/
+# v0.3.39) - both already present well before this pin, so this is a normal
+# "latest tested release" bump, not a special-case one.
+#
+# The build recipe itself changed substantially at this pin vs the previous
+# v0.3.26 one - ported here to match JamePeng's own tested recipe rather than
+# grafting old flags onto a new source commit:
+#   - CPU dispatch: one "Basic" (no-SIMD) build -> GGML_BACKEND_DL +
+#     GGML_CPU_ALL_VARIANTS (runtime-selected CPU backend DLLs/.so's).
+#   - Windows: MSVC/MSBuild -> Ninja Multi-Config + Clang/LLVM via the
+#     toolchain file shipped in the llama.cpp submodule itself
+#     (vendor/llama.cpp/cmake/x64-windows-llvm.cmake) - JamePeng's own
+#     comment: MSVC skips several GGML CPU all-variant backends (ivybridge,
+#     piledriver, cooperlake, zen4, sapphirerapids).
+#   - New flags: LLAMA_BUILD_BORINGSSL, LLAMA_BUILD_EXAMPLES/TESTS/TOOLS/
+#     SERVER/UI=OFF, CUDA diag-suppress.
+#   - Arch list: JamePeng's own build dropped 101-real (kept 100-real and
+#     120-real) - matched here rather than diverging from what's tested.
 #
 # Every wheel gets a SLSA build provenance attestation
 # (actions/attest-build-provenance) binding it to this workflow run and
@@ -40,7 +58,7 @@ on:
       release_tag:
         description: "Tag for the release these wheels get published under"
         required: true
-        default: "v5.3-llama-deps"
+        default: "v5.4-llama-deps"
 
 permissions:
   contents: read
@@ -51,12 +69,13 @@ env:
   # "-real" = embed SASS only (no PTX) for each listed arch - matches
   # exactly what JamePeng's own build used for this commit, keeps wheel
   # size sane vs "all"/PTX-inclusive builds.
-  CUDAARCHVER: "75-real;80-real;86-real;87-real;89-real;90-real;100-real;101-real;120-real"
-  # Immutable commit SHAs, not branches/tags - see docs/BUILD_WHEELS_HOWTO.md.
-  # These are JamePeng/llama-cpp-python's own tagged v0.3.26 cu128 release
-  # commits (v0.3.26-cu128-Basic-linux-20260219 / -win-20260220).
-  LLAMA_CPP_PYTHON_LINUX_REF: "32f2380ec8ebfa0d5f01c22e3ba86d8d5e762882"
-  LLAMA_CPP_PYTHON_WIN_REF: "3d0fd1b75ee564361a4babf21f88855225ba1fe0"
+  CUDAARCHVER: "75-real;80-real;86-real;87-real;89-real;90-real;100-real;120-real"
+  # Immutable commit SHA, not a branch/tag - see docs/BUILD_WHEELS_HOWTO.md.
+  # JamePeng/llama-cpp-python's own tagged v0.3.44 cu128 release commit,
+  # shared by both platform tags (v0.3.44-cu128-linux-20260721 /
+  # v0.3.44-cu128-win-20260721).
+  LLAMA_CPP_PYTHON_LINUX_REF: "ebf6099b81cf67cfb5eec569466367c9fa04e9d4"
+  LLAMA_CPP_PYTHON_WIN_REF: "ebf6099b81cf67cfb5eec569466367c9fa04e9d4"
 
 concurrency:
   group: build-llama-wheels-${{ github.workflow }}
@@ -78,29 +97,29 @@ jobs:
       run:
         shell: pwsh
     env:
-      MAX_JOBS: 8
+      MAX_JOBS: 12
     steps:
+      - name: Add MSBuild to PATH
+        uses: microsoft/setup-msbuild@v3
+        with:
+          msbuild-architecture: x64
+
       - name: Checkout llama-cpp-python (JamePeng fork, pinned commit)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: JamePeng/llama-cpp-python
           ref: ${{ env.LLAMA_CPP_PYTHON_WIN_REF }}
           submodules: recursive
 
-      - name: Add MSBuild to PATH
-        uses: microsoft/setup-msbuild@v2
-        with:
-          msbuild-architecture: x64
-
       - name: Install CUDA ${{ env.CUDAVER }}
-        uses: N-Storm/cuda-toolkit@v0.2.28
+        uses: Jimver/cuda-toolkit@v0.2.35
         id: cuda-toolkit
         with:
           cuda: ${{ env.CUDAVER }}
           use-github-cache: false
 
       - name: Install uv and Python ${{ matrix.pyver }}
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.pyver }}
           activate-environment: true
@@ -111,23 +130,71 @@ jobs:
           git config --system core.longpaths true
           uv pip install --upgrade build setuptools wheel packaging
 
+      - name: Setup MSVC environment for nvcc
+        shell: cmd
+        run: |
+          call "C:\Program Files\Microsoft Visual Studio\2022\Enterprise\VC\Auxiliary\Build\vcvarsall.bat" x64
+          echo PATH=%PATH%>>%GITHUB_ENV%
+          echo INCLUDE=%INCLUDE%>>%GITHUB_ENV%
+          echo LIB=%LIB%>>%GITHUB_ENV%
+          echo LIBPATH=%LIBPATH%>>%GITHUB_ENV%
+
       - name: Build wheel
         run: |
-          $cudaVersion = $env:CUDAVER.Remove($env:CUDAVER.LastIndexOf('.')).Replace('.','')
+          $cudaVersion = $env:CUDAVER.Remove($env:CUDAVER.LastIndexOf('.')).Replace('.', '')
           $env:CUDA_HOME = $env:CUDA_PATH
           $env:CUDA_TOOLKIT_ROOT_DIR = $env:CUDA_PATH
           $env:VERBOSE = '1'
 
-          # "Basic" CPU baseline (no AVX/AVX2/FMA/F16C) - maximum CPU
-          # compatibility for the fallback path when GPU offload isn't
-          # in play. GPU acceleration (the CUDAARCHVER list above) is
-          # the path that actually matters for this project.
-          $env:CMAKE_ARGS = '-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES=' + $env:CUDAARCHVER + ' -DCMAKE_BUILD_PARALLEL_LEVEL=' + $env:MAX_JOBS
-          $env:CMAKE_ARGS = "-DGGML_CUDA_FORCE_MMQ=on -DCUDA_SEPARABLE_COMPILATION=on $env:CMAKE_ARGS"
-          $env:CMAKE_ARGS = "-DENABLE_CCACHE=on -DLLAMA_CURL=off $env:CMAKE_ARGS"
-          $env:CMAKE_ARGS = $env:CMAKE_ARGS + ' -DGGML_NATIVE=off -DGGML_AVX=off -DGGML_AVX2=off -DGGML_AVX_VNNI=off -DGGML_AVX512=off -DGGML_AVX512_VBMI=off -DGGML_AVX512_VNNI=off -DGGML_AVX512_BF16=off -DGGML_FMA=off -DGGML_F16C=off'
+          # Force CMake to use Ninja + LLVM/Clang instead of the default
+          # Visual Studio generator - MSVC skips several GGML CPU
+          # all-variant backends (ivybridge, piledriver, cooperlake, zen4,
+          # sapphirerapids). Toolchain file ships in the llama.cpp submodule.
+          $env:CMAKE_GENERATOR = 'Ninja Multi-Config'
+          $toolchainFile = (Join-Path $env:GITHUB_WORKSPACE "vendor\llama.cpp\cmake\x64-windows-llvm.cmake")
+          if (!(Test-Path $toolchainFile)) {
+            Write-Error "Toolchain file not found: $toolchainFile"
+            exit 1
+          }
+          $toolchainFile = $toolchainFile.Replace('\', '/')
 
+          $cudaDiagSuppress = '--diag-suppress=177,221,550'
+
+          $cmakeArgs = @(
+            "-DCMAKE_TOOLCHAIN_FILE=$toolchainFile"
+            '-DLLAMA_BUILD_BORINGSSL=ON'
+
+            # Disable non-wheel targets.
+            '-DLLAMA_BUILD_EXAMPLES=OFF'
+            '-DLLAMA_BUILD_TESTS=OFF'
+            '-DLLAMA_BUILD_TOOLS=OFF'
+            '-DLLAMA_BUILD_SERVER=OFF'
+            '-DLLAMA_BUILD_UI=OFF'
+            '-DLLAMA_USE_PREBUILT_UI=OFF'
+            '-DLLAMA_CURL=OFF'
+
+            # GGML dynamic backend layout - runtime-selected CPU backend
+            # DLLs plus CUDA, no more single baked-in "Basic" CPU build.
+            '-DGGML_CPU=ON'
+            '-DGGML_CUDA=ON'
+            '-DGGML_NATIVE=OFF'
+            '-DGGML_BACKEND_DL=ON'
+            '-DGGML_CPU_ALL_VARIANTS=ON'
+            '-DGGML_OPENMP=ON'
+
+            # CUDA backend.
+            "-DCMAKE_CUDA_ARCHITECTURES=$env:CUDAARCHVER"
+            '-DGGML_CUDA_FORCE_MMQ=ON'
+            '-DCUDA_SEPARABLE_COMPILATION=ON'
+            "-DCMAKE_CUDA_FLAGS=$cudaDiagSuppress"
+
+            # Build behavior.
+            "-DCMAKE_BUILD_PARALLEL_LEVEL=$env:MAX_JOBS"
+            '-DENABLE_CCACHE=ON'
+          )
+          $env:CMAKE_ARGS = $cmakeArgs -join ' '
           Write-Output "CMAKE_ARGS=$env:CMAKE_ARGS"
+
           python -m build --wheel
 
           if (!(Test-Path '.\dist\*.whl')) {
@@ -180,21 +247,23 @@ jobs:
     defaults:
       run:
         shell: bash
+    env:
+      MAX_JOBS: 12
     steps:
       - name: Install build dependencies
         run: |
           apt update
-          apt install -y build-essential ccache cmake curl git libgomp1 libjpeg-dev libssl-dev
+          apt install -y build-essential ccache cmake curl git libgomp1 libjpeg-dev libssl-dev ninja-build
 
       - name: Checkout llama-cpp-python (JamePeng fork, pinned commit)
-        uses: actions/checkout@v4
+        uses: actions/checkout@v6
         with:
           repository: JamePeng/llama-cpp-python
           ref: ${{ env.LLAMA_CPP_PYTHON_LINUX_REF }}
           submodules: recursive
 
       - name: Install uv and Python ${{ matrix.pyver }}
-        uses: astral-sh/setup-uv@v6
+        uses: astral-sh/setup-uv@v7
         with:
           python-version: ${{ matrix.pyver }}
           activate-environment: true
@@ -213,14 +282,44 @@ jobs:
         run: |
           set -euo pipefail
 
-          CMAKE_ARGS="-DGGML_CUDA=on -DCMAKE_CUDA_ARCHITECTURES='${CUDAARCHVER}'"
-          CMAKE_ARGS="-DGGML_CUDA_FORCE_MMQ=on ${CMAKE_ARGS}"
-          CMAKE_ARGS="${CMAKE_ARGS} -DLLAMA_CURL=off -DLLAMA_OPENSSL=on"
-          # "Basic" CPU baseline (no AVX/AVX2/FMA/F16C) - see the matching
-          # comment in the Windows job above.
-          CMAKE_ARGS="${CMAKE_ARGS} -DGGML_NATIVE=off -DGGML_AVX=off -DGGML_AVX2=off -DGGML_AVX_VNNI=off -DGGML_AVX512=off -DGGML_AVX512_VBMI=off -DGGML_AVX512_VNNI=off -DGGML_AVX512_BF16=off -DGGML_FMA=off -DGGML_F16C=off"
+          # Build one CUDA wheel with dynamic GGML backends - runtime-selected
+          # CPU backend .so's instead of one baked-in "Basic" CPU build. See
+          # the matching comment in the Windows job above.
+          CMAKE_ARGS_ARRAY=(
+            "-G Ninja"
 
+            # Disable non-wheel targets.
+            "-DLLAMA_BUILD_EXAMPLES=OFF"
+            "-DLLAMA_BUILD_TESTS=OFF"
+            "-DLLAMA_BUILD_TOOLS=OFF"
+            "-DLLAMA_BUILD_SERVER=OFF"
+            "-DLLAMA_BUILD_UI=OFF"
+            "-DLLAMA_USE_PREBUILT_UI=OFF"
+            "-DLLAMA_CURL=OFF"
+            "-DLLAMA_OPENSSL=ON"
+
+            # GGML dynamic backend layout.
+            "-DGGML_CPU=ON"
+            "-DGGML_CUDA=ON"
+            "-DGGML_NATIVE=OFF"
+            "-DGGML_BACKEND_DL=ON"
+            "-DGGML_CPU_ALL_VARIANTS=ON"
+            "-DGGML_OPENMP=ON"
+
+            # CUDA backend.
+            "-DCMAKE_CUDA_ARCHITECTURES=${CUDAARCHVER}"
+            "-DGGML_CUDA_FORCE_MMQ=ON"
+            "-DCUDA_SEPARABLE_COMPILATION=ON"
+            "-DCMAKE_CUDA_FLAGS=--diag-suppress=177,221,550"
+
+            # Build behavior.
+            "-DCMAKE_BUILD_PARALLEL_LEVEL=${MAX_JOBS}"
+            "-DGGML_CCACHE=ON"
+            "-DENABLE_CCACHE=ON"
+          )
+          CMAKE_ARGS="${CMAKE_ARGS_ARRAY[*]}"
           echo "CMAKE_ARGS=${CMAKE_ARGS}"
+
           uv pip install --upgrade build setuptools wheel packaging
           CMAKE_ARGS="${CMAKE_ARGS}" uv build --wheel
 
@@ -268,14 +367,14 @@ jobs:
           sha256sum *.whl | tee SHA256SUMS.txt
 
       - name: Create prerelease
-        uses: softprops/action-gh-release@v2
+        uses: softprops/action-gh-release@v3
         with:
           tag_name: ${{ inputs.release_tag }}
           prerelease: true
-          name: "llama-cpp-python 0.3.26+cu128 (attested)"
+          name: "llama-cpp-python 0.3.44+cu128 (attested)"
           body: |
-            Attested llama-cpp-python 0.3.26 CUDA 12.8 wheels, built from
-            pinned JamePeng/llama-cpp-python commits by
+            Attested llama-cpp-python 0.3.44 CUDA 12.8 wheels, built from
+            a pinned JamePeng/llama-cpp-python commit by
             `.github/workflows/build-llama-wheels.yml`.
 
             Each wheel now covers all supported CUDA architectures
